@@ -39,6 +39,7 @@ type key string
 
 type SaveableSettings interface {
 	Filename(additionalSuffix string) string
+	Reload(filePath string) error
 	Save(io.Writer) error
 	ResetToDefaults()
 }
@@ -54,98 +55,57 @@ type AppSettings interface {
 }
 
 type defaultAppSettings struct {
-	mutex      *sync.Mutex
-	config     configFile
-	autoStart  bool
-	watchPaths []string
+	config configFile
 }
 
 func (o *defaultAppSettings) Filename(additionalSuffix string) string {
 	return "app" + additionalSuffix + FileExtension
 }
 
+func (o *defaultAppSettings) Reload(filePath string) error {
+	return o.config.Reload(filePath)
+}
+
 func (o *defaultAppSettings) Save(w io.Writer) error {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	o.updateValuesUnsafe()
-
 	return o.config.Save(w)
 }
 
 func (o *defaultAppSettings) ResetToDefaults() {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
 	o.config.Clear()
 
-	o.autoStart = true
-	o.watchPaths = []string{}
-
-	o.updateValuesUnsafe()
-}
-
-func (o *defaultAppSettings) updateValuesUnsafe() {
 	o.config.AddSection(appSettings)
-	o.config.AddOrUpdateKeyValue(appSettings, appAutoStart, strconv.FormatBool(o.autoStart))
+	o.config.AddOrUpdateKeyValue(appSettings, appAutoStart, strconv.FormatBool(true))
 	o.config.DeleteSection(appWatchPaths)
 	o.config.AddSection(appWatchPaths)
-
-	for _, s := range o.watchPaths {
-		o.config.AddValueToSection(appWatchPaths, s)
-	}
 }
 
 func (o *defaultAppSettings) IsAutoStart() bool {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
+	v, err := strconv.ParseBool(o.config.KeyValue(appSettings, appAutoStart))
+	if err != nil {
+		return false
+	}
 
-	return o.autoStart
+	return v
 }
 
 func (o *defaultAppSettings) SetAutoStart(v bool) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	o.autoStart = v
+	o.config.AddOrUpdateKeyValue(appSettings, appAutoStart, strconv.FormatBool(v))
 }
 
 func (o *defaultAppSettings) WatchPaths() []string {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	return o.watchPaths
+	return o.config.SectionKeys(appWatchPaths)
 }
 
 func (o *defaultAppSettings) AddWatchPath(p string) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	o.watchPaths = append(o.watchPaths, p)
+	o.config.AddValueToSection(appWatchPaths, p)
 }
 
 func (o *defaultAppSettings) RemoveWatchPath(p string) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	for i := range o.watchPaths {
-		if o.watchPaths[i] == p {
-			o.watchPaths = append(o.watchPaths[:i], o.watchPaths[i+1:]...)
-		}
-	}
+	o.config.DeleteKey(appWatchPaths, key(p))
 }
 
 func (o *defaultAppSettings) HasWatchPath(dirPath string) bool {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
-	for _, p := range o.watchPaths {
-		if p == dirPath {
-			return true
-		}
-	}
-
-	return false
+	return o.config.HasKey(appWatchPaths, key(dirPath))
 }
 
 type LaunchersSettings interface {
@@ -155,20 +115,21 @@ type LaunchersSettings interface {
 }
 
 type defaultLaunchersSettings struct {
-	mutex            *sync.Mutex
-	namesToLaunchers map[string]Launcher
-	config           configFile
+	mutex  *sync.Mutex
+	config configFile
 }
 
 func (o *defaultLaunchersSettings) Filename(additionalSuffix string) string {
 	return "launchers" + additionalSuffix + FileExtension
 }
 
+func (o *defaultLaunchersSettings) Reload(filePath string) error {
+	return o.config.Reload(filePath)
+}
+
 func (o *defaultLaunchersSettings) Save(w io.Writer) error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
-
-	o.updateValuesUnsafe()
 
 	return o.config.Save(w)
 }
@@ -179,37 +140,25 @@ func (o *defaultLaunchersSettings) ResetToDefaults() {
 
 	o.config.Clear()
 
-	o.namesToLaunchers = make(map[string]Launcher)
-
 	l := NewLauncher()
 
-	l.ResetToDefaults()
-
-	o.namesToLaunchers[l.Name()] = l
-
-	o.updateValuesUnsafe()
+	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherExe, l.ExePath())
+	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherDefaultArgs, l.DefaultArgs())
 }
 
-func (o *defaultLaunchersSettings) updateValuesUnsafe() {
-	for _, launcher := range o.namesToLaunchers {
-		sec := section(launcher.Name())
-		o.config.AddOrUpdateKeyValue(sec, launcherExe, launcher.ExePath())
-		o.config.AddOrUpdateKeyValue(sec, launcherDefaultArgs, launcher.DefaultArgs())
-	}
-}
-
-func (o *defaultLaunchersSettings) AddOrUpdate(settings Launcher) {
+func (o *defaultLaunchersSettings) AddOrUpdate(l Launcher) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	o.namesToLaunchers[settings.Name()] = settings
+	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherExe, l.ExePath())
+	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherDefaultArgs, l.DefaultArgs())
 }
 
-func (o *defaultLaunchersSettings) Remove(settings Launcher) {
+func (o *defaultLaunchersSettings) Remove(l Launcher) {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	delete(o.namesToLaunchers, settings.Name())
+	o.config.DeleteSection(section(l.Name()))
 }
 
 type Launcher interface {
@@ -279,81 +228,73 @@ type GameSettings interface {
 }
 
 type defaultGameSettings struct {
-	config                 configFile
-	name                   string
-	launcher               string
-	launcherOverrideArgs   string
-	launcherAdditionalArgs string
-	icon                   string
+	config configFile
 }
 
 func (o *defaultGameSettings) Filename(additionalSuffix string) string {
 	return "game" + additionalSuffix + FileExtension
 }
 
+func (o *defaultGameSettings) Reload(filePath string) error {
+	return o.config.Reload(filePath)
+}
+
 func (o *defaultGameSettings) ResetToDefaults() {
 	o.config.Clear()
 
-	o.name = "example-game"
-	o.launcher = "example-launcher"
-	o.launcherOverrideArgs = ""
-	o.launcherAdditionalArgs = ""
-
+	o.config.AddOrUpdateKeyValue(none, gameName, "example-game")
+	o.config.AddOrUpdateKeyValue(none, gameLauncher, "example-launcher")
+	o.config.AddOrUpdateKeyValue(none, gameAdditionalArgs, "")
+	o.config.AddOrUpdateKeyValue(none, gameOverrideArgs, "")
 	if runtime.GOOS == "windows" {
-		o.icon = "C:\\path\\to\\game-icon.png"
+		o.config.AddOrUpdateKeyValue(none, gameIcon, "C:\\path\\to\\game-icon.png")
 	} else {
-		o.icon = "/path/to/game-icon.png"
+		o.config.AddOrUpdateKeyValue(none, gameIcon, "/path/to/game-icon.png")
 	}
 }
 
 func (o *defaultGameSettings) Save(w io.Writer) error {
-	o.config.AddOrUpdateKeyValue(none, gameName, o.name)
-	o.config.AddOrUpdateKeyValue(none, gameLauncher, o.launcher)
-	o.config.AddOrUpdateKeyValue(none, gameAdditionalArgs, o.launcherAdditionalArgs)
-	o.config.AddOrUpdateKeyValue(none, gameOverrideArgs, o.launcherOverrideArgs)
-	o.config.AddOrUpdateKeyValue(none, gameIcon, o.icon)
-
 	return o.config.Save(w)
 }
 
 func (o *defaultGameSettings) SetName(name string) {
-	o.name = name
+	o.config.AddOrUpdateKeyValue(none, gameName, name)
 }
 
 func (o *defaultGameSettings) Name() string {
-	return o.name
+	return o.config.KeyValue(none, gameName)
 }
 
 func (o *defaultGameSettings) SetLauncher(name string) {
-	o.launcher = name
+	o.config.AddOrUpdateKeyValue(section(""), gameLauncher, name)
 }
 
 func (o *defaultGameSettings) Launcher() string {
-	return o.launcher
+	return o.config.KeyValue(none, gameLauncher)
 }
 
 func (o *defaultGameSettings) SetLauncherOverrideArgs(args string) {
-	o.launcherOverrideArgs = args
+	o.config.AddOrUpdateKeyValue(none, gameOverrideArgs, args)
 }
 
 func (o *defaultGameSettings) LauncherOverrideArgs() string {
-	return o.launcherOverrideArgs
+	return o.config.KeyValue(none, gameOverrideArgs)
 }
 
 func (o *defaultGameSettings) SetAdditionalLauncherArgs(args string) {
-	o.launcherAdditionalArgs = args
+	o.config.AddOrUpdateKeyValue(none, gameAdditionalArgs, args)
 }
 
 func (o *defaultGameSettings) AdditionalLauncherArgs() string {
-	return o.launcherAdditionalArgs
+	return o.config.KeyValue(none, gameAdditionalArgs)
 }
 
-func (o *defaultGameSettings) SetIcon(target string) {
-	o.icon = target
+func (o *defaultGameSettings) SetIcon(iconPath string) {
+	o.config.AddOrUpdateKeyValue(none, gameIcon, iconPath)
 }
 
 func (o *defaultGameSettings) Icon() string {
-	return o.icon
+	return o.config.KeyValue(none, gameIcon)
 }
 
 type KnownGamesSettings interface {
@@ -371,6 +312,10 @@ type defaultKnownGamesSettings struct {
 
 func (o *defaultKnownGamesSettings) Filename(additionalSuffix string) string {
 	return ".known-games" + additionalSuffix + FileExtension
+}
+
+func (o *defaultKnownGamesSettings) Reload(filePath string) error {
+	return o.config.Reload(filePath)
 }
 
 func (o *defaultKnownGamesSettings) ResetToDefaults() {
@@ -440,7 +385,6 @@ func DirPath() string {
 
 func NewAppSettings() AppSettings {
 	s := &defaultAppSettings{
-		mutex:  &sync.Mutex{},
 		config: newEmptyIniFile(),
 	}
 
@@ -451,9 +395,8 @@ func NewAppSettings() AppSettings {
 
 func NewLaunchersSettings() LaunchersSettings {
 	s := &defaultLaunchersSettings{
-		mutex:            &sync.Mutex{},
-		namesToLaunchers: make(map[string]Launcher),
-		config:           newEmptyIniFile(),
+		mutex:  &sync.Mutex{},
+		config: newEmptyIniFile(),
 	}
 
 	s.ResetToDefaults()
@@ -487,32 +430,30 @@ func NewKnownGamesSettings() KnownGamesSettings {
 }
 
 func LoadAppSettings(filePath string) (AppSettings, error) {
-	f, err := loadIniFile(filePath)
+	f, err := loadIniConfigFile(filePath)
 	if err != nil {
 		return &defaultAppSettings{}, err
 	}
 
 	return &defaultAppSettings{
-		mutex:  &sync.Mutex{},
 		config: f,
 	}, nil
 }
 
 func LoadLaunchersSettings(filePath string) (LaunchersSettings, error) {
-	f, err := loadIniFile(filePath)
+	f, err := loadIniConfigFile(filePath)
 	if err != nil {
 		return &defaultLaunchersSettings{}, err
 	}
 
 	return &defaultLaunchersSettings{
-		mutex:            &sync.Mutex{},
-		namesToLaunchers: make(map[string]Launcher),
-		config:           f,
+		mutex:  &sync.Mutex{},
+		config: f,
 	}, nil
 }
 
 func LoadGameSettings(filePath string) (GameSettings, error) {
-	f, err := loadIniFile(filePath)
+	f, err := loadIniConfigFile(filePath)
 	if err != nil {
 		return &defaultGameSettings{}, err
 	}
@@ -523,7 +464,7 @@ func LoadGameSettings(filePath string) (GameSettings, error) {
 }
 
 func LoadKnownGames(filePath string) (KnownGamesSettings, error) {
-	f, err := loadIniFile(filePath)
+	f, err := loadIniConfigFile(filePath)
 	if err != nil {
 		return &defaultKnownGamesSettings{}, err
 	}

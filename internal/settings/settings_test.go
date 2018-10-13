@@ -16,7 +16,7 @@ func TestNewAppSettings(t *testing.T) {
 	}
 
 	exp := `[settings]
-auto_start = false
+auto_start = true
 
 [watch_paths]
 
@@ -46,7 +46,7 @@ func TestAppSettingsManipulateValues(t *testing.T) {
 	}
 
 	exp := `[settings]
-auto_start = false
+auto_start = true
 
 [watch_paths]
 `
