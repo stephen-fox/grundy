@@ -75,8 +75,6 @@ func main() {
 }
 
 func loopAndUpdateSettings(app settings.AppSettings, launchers settings.LaunchersSettings, changes chan watcher.Changes) {
-	m := make(map[string]watcher.Watcher)
-
 	for change := range changes {
 		for _, filePath := range change.UpdatedFilePaths {
 			log.Println("Main setting file has been updated:", filePath)
