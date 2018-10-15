@@ -63,7 +63,7 @@ func (o *iniConfigFile) SectionKeys(s section) []string {
 	var keys []string
 
 	for _, k := range sec.Keys() {
-		keys = append(keys, k.String())
+		keys = append(keys, k.Name())
 	}
 
 	return keys
