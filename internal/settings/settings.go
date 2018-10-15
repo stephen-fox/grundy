@@ -23,14 +23,18 @@ const (
 
 	appAutoStart key = "auto_start"
 
-	launcherExe         key = "exe"
+	launcherExePath     key = "exe_path"
 	launcherDefaultArgs key = "default_args"
 
 	gameName           key = "name"
+	gameExePath        key = "exe_path"
 	gameLauncher       key = "launcher"
 	gameOverrideArgs   key = "override_args"
 	gameAdditionalArgs key = "additional_args"
 	gameIcon           key = "icon"
+	gameCategories     key = "categories_comma_separated"
+
+	gameCategoriesSeparator = ","
 )
 
 type section string
@@ -110,12 +114,12 @@ func (o *defaultAppSettings) HasWatchPath(dirPath string) bool {
 
 type LaunchersSettings interface {
 	SaveableSettings
+	Has(name string) (Launcher, bool)
 	AddOrUpdate(Launcher)
 	Remove(Launcher)
 }
 
 type defaultLaunchersSettings struct {
-	mutex  *sync.Mutex
 	config configFile
 }
 
@@ -128,36 +132,42 @@ func (o *defaultLaunchersSettings) Reload(filePath string) error {
 }
 
 func (o *defaultLaunchersSettings) Save(w io.Writer) error {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
 	return o.config.Save(w)
 }
 
 func (o *defaultLaunchersSettings) ResetToDefaults() {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
 	o.config.Clear()
 
 	l := NewLauncher()
 
-	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherExe, l.ExePath())
+	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherExePath, l.ExePath())
 	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherDefaultArgs, l.DefaultArgs())
+}
+
+func (o *defaultLaunchersSettings) Has(name string) (Launcher, bool) {
+	l := NewLauncher()
+
+	sec := section(name)
+
+	if o.config.HasSection(sec) {
+		l.SetName(name)
+		l.SetExePath(o.config.KeyValue(sec, launcherExePath))
+		l.SetDefaultArgs(o.config.KeyValue(sec, launcherDefaultArgs))
+
+		return l, true
+	}
+
+	return l, false
 }
 
 func (o *defaultLaunchersSettings) AddOrUpdate(l Launcher) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
+	sec := section(l.Name())
 
-	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherExe, l.ExePath())
-	o.config.AddOrUpdateKeyValue(section(l.Name()), launcherDefaultArgs, l.DefaultArgs())
+	o.config.AddOrUpdateKeyValue(sec, launcherExePath, l.ExePath())
+	o.config.AddOrUpdateKeyValue(sec, launcherDefaultArgs, l.DefaultArgs())
 }
 
 func (o *defaultLaunchersSettings) Remove(l Launcher) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
-
 	o.config.DeleteSection(section(l.Name()))
 }
 
@@ -167,6 +177,7 @@ type Launcher interface {
 	Name() string
 	SetExePath(string)
 	ExePath() string
+	ExeDirPath() string
 	SetDefaultArgs(string)
 	DefaultArgs() string
 }
@@ -205,6 +216,10 @@ func (o *defaultLauncherSettings) ExePath() string {
 	return o.exePath
 }
 
+func (o *defaultLauncherSettings) ExeDirPath() string {
+	return path.Dir(o.ExePath())
+}
+
 func (o *defaultLauncherSettings) SetDefaultArgs(args string) {
 	o.defaultArgs = args
 }
@@ -217,18 +232,26 @@ type GameSettings interface {
 	SaveableSettings
 	SetName(string)
 	Name() string
+	SetExePath(string)
+	ExePath(relativeToSettings bool) string
 	SetLauncher(string)
 	Launcher() string
+	ShouldOverrideLauncherArgs() bool
 	SetLauncherOverrideArgs(string)
 	LauncherOverrideArgs() string
 	SetAdditionalLauncherArgs(string)
 	AdditionalLauncherArgs() string
-	SetIcon(string)
-	Icon() string
+	SetIconPath(string)
+	IconPath() string
+	AddCategory(string)
+	RemoveCategory(string)
+	SetCategories([]string)
+	Categories() []string
 }
 
 type defaultGameSettings struct {
-	config configFile
+	config   configFile
+	filePath string
 }
 
 func (o *defaultGameSettings) Filename(additionalSuffix string) string {
@@ -243,6 +266,7 @@ func (o *defaultGameSettings) ResetToDefaults() {
 	o.config.Clear()
 
 	o.config.AddOrUpdateKeyValue(none, gameName, "example-game")
+	o.config.AddOrUpdateKeyValue(none, gameExePath, "example.exe")
 	o.config.AddOrUpdateKeyValue(none, gameLauncher, "example-launcher")
 	o.config.AddOrUpdateKeyValue(none, gameAdditionalArgs, "")
 	o.config.AddOrUpdateKeyValue(none, gameOverrideArgs, "")
@@ -251,6 +275,7 @@ func (o *defaultGameSettings) ResetToDefaults() {
 	} else {
 		o.config.AddOrUpdateKeyValue(none, gameIcon, "/path/to/game-icon.png")
 	}
+	o.config.AddOrUpdateKeyValue(none, gameCategories, "My Cool Category,Another Cool Category,some-other category")
 }
 
 func (o *defaultGameSettings) Save(w io.Writer) error {
@@ -265,12 +290,30 @@ func (o *defaultGameSettings) Name() string {
 	return o.config.KeyValue(none, gameName)
 }
 
+func (o *defaultGameSettings) SetExePath(p string) {
+	o.config.AddOrUpdateKeyValue(none, gameExePath, p)
+}
+
+func (o *defaultGameSettings) ExePath(relativeToSettings bool) string {
+	exePath := o.config.KeyValue(none, gameExePath)
+
+	if relativeToSettings {
+		return path.Join(path.Dir(o.filePath), exePath)
+	}
+
+	return exePath
+}
+
 func (o *defaultGameSettings) SetLauncher(name string) {
 	o.config.AddOrUpdateKeyValue(section(""), gameLauncher, name)
 }
 
 func (o *defaultGameSettings) Launcher() string {
 	return o.config.KeyValue(none, gameLauncher)
+}
+
+func (o *defaultGameSettings) ShouldOverrideLauncherArgs() bool {
+	return len(o.LauncherOverrideArgs()) > 0
 }
 
 func (o *defaultGameSettings) SetLauncherOverrideArgs(args string) {
@@ -289,12 +332,51 @@ func (o *defaultGameSettings) AdditionalLauncherArgs() string {
 	return o.config.KeyValue(none, gameAdditionalArgs)
 }
 
-func (o *defaultGameSettings) SetIcon(iconPath string) {
+func (o *defaultGameSettings) SetIconPath(iconPath string) {
 	o.config.AddOrUpdateKeyValue(none, gameIcon, iconPath)
 }
 
-func (o *defaultGameSettings) Icon() string {
+func (o *defaultGameSettings) IconPath() string {
 	return o.config.KeyValue(none, gameIcon)
+}
+
+func (o *defaultGameSettings) AddCategory(c string) {
+	current := o.Categories()
+
+	for _, s := range current {
+		if s == c {
+			return
+		}
+	}
+
+	current = append(current, c)
+	o.SetCategories(current)
+}
+
+func (o *defaultGameSettings) RemoveCategory(c string) {
+	current := o.Categories()
+
+	for i, s := range current {
+		if s == c {
+			current = append(current[:i], current[i+1:]...)
+			o.SetCategories(current)
+			return
+		}
+	}
+}
+
+func (o *defaultGameSettings) SetCategories(cats []string) {
+	o.config.AddOrUpdateKeyValue(none, gameCategories, strings.Join(cats, gameCategoriesSeparator))
+}
+
+func (o *defaultGameSettings) Categories() []string {
+	data := o.config.KeyValue(none, gameCategories)
+
+	if len(data) == 0 {
+		return []string{}
+	}
+
+	return strings.Split(data, gameCategoriesSeparator)
 }
 
 type KnownGamesSettings interface {
@@ -395,7 +477,6 @@ func NewAppSettings() AppSettings {
 
 func NewLaunchersSettings() LaunchersSettings {
 	s := &defaultLaunchersSettings{
-		mutex:  &sync.Mutex{},
 		config: newEmptyIniFile(),
 	}
 
@@ -447,7 +528,6 @@ func LoadLaunchersSettings(filePath string) (LaunchersSettings, error) {
 	}
 
 	return &defaultLaunchersSettings{
-		mutex:  &sync.Mutex{},
 		config: f,
 	}, nil
 }
@@ -459,7 +539,8 @@ func LoadGameSettings(filePath string) (GameSettings, error) {
 	}
 
 	return &defaultGameSettings{
-		config: f,
+		config:   f,
+		filePath: filePath,
 	}, nil
 }
 

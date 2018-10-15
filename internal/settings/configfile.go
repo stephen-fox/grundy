@@ -8,6 +8,7 @@ import (
 )
 
 type configFile interface {
+	HasSection(section) bool
 	HasKey(section, key) bool
 	SectionKeys(section) []string
 	KeyValue(section, key) string
@@ -39,6 +40,18 @@ func (o *iniConfigFile) Reload(filePath string) error {
 	o.ini = i
 
 	return nil
+}
+
+func (o *iniConfigFile) HasSection(s section) bool {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	_, err := o.ini.GetSection(string(s))
+	if err != nil {
+		return false
+	}
+
+	return true
 }
 
 func (o *iniConfigFile) HasKey(s section, k key) bool {
