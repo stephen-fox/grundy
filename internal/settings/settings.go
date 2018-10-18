@@ -14,8 +14,8 @@ const (
 	FileExtension = ".grundy.ini"
 	ExampleSuffix = "-example"
 
-	defaultDirMode  = 0700
-	defaultFileMode = 0600
+	defaultDirMode  = 0755
+	defaultFileMode = 0644
 
 	none          section = ""
 	appSettings   section = "settings"
