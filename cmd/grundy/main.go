@@ -1,17 +1,14 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"log"
 	"os"
 	"path"
-	"strings"
 	"sync"
 
+	"github.com/stephen-fox/grundy/internal/gcw"
 	"github.com/stephen-fox/grundy/internal/settings"
-	"github.com/stephen-fox/steamutil/locations"
-	"github.com/stephen-fox/steamutil/shortcuts"
 	"github.com/stephen-fox/watcher"
 )
 
@@ -25,19 +22,6 @@ type primarySettings struct {
 	launchers          settings.LaunchersSettings
 	steamShortuctsLock *sync.Mutex
 	dirPathsToWatchers map[string]watcher.Watcher
-}
-
-type gameCollectionWatcherConfig struct {
-	dirPath            string
-	launchers          settings.LaunchersSettings
-	steamShortcutsLock *sync.Mutex
-}
-
-type steamShortcutConfig struct {
-	shortcutsFilePath string
-	game              settings.GameSettings
-	launcher          settings.Launcher
-	fileAccess        *sync.Mutex
 }
 
 var (
@@ -155,13 +139,14 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 			continue
 		}
 
-		collectionWatcherConfig := gameCollectionWatcherConfig{
-			dirPath:            dirPath,
-			launchers:          primary.launchers,
-			steamShortcutsLock: primary.steamShortuctsLock,
+		collectionWatcherConfig := &gcw.WatcherConfig{
+			AppSettingsDirPath: *appSettingsDirPath,
+			DirPath:            dirPath,
+			Launchers:          primary.launchers,
+			SteamShortcutsLock: primary.steamShortuctsLock,
 		}
 
-		w, err := createGameCollectionWatcher(collectionWatcherConfig)
+		w, err := gcw.NewGameCollectionWatcher(collectionWatcherConfig)
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -169,177 +154,8 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 
 		log.Println("Now watching subdirectories in", dirPath)
 
+		w.Start()
+
 		primary.dirPathsToWatchers[dirPath] = w
 	}
-}
-
-func createGameCollectionWatcher(config gameCollectionWatcherConfig) (watcher.Watcher, error) {
-	watcherConfig := watcher.Config{
-		ScanFunc:    watcher.ScanFilesInSubdirectories,
-		RootDirPath: config.dirPath,
-		FileSuffix:  settings.FileExtension,
-		Changes:     make(chan watcher.Changes),
-	}
-
-	w, err := watcher.NewWatcher(watcherConfig)
-	if err != nil {
-		return nil, errors.New("Failed to create watcher for " + config.dirPath + " - " + err.Error())
-	}
-
-	w.Start()
-
-	go gameCollectionLooper(config, watcherConfig.Changes)
-
-	return w, nil
-}
-
-func gameCollectionLooper(config gameCollectionWatcherConfig, changes chan watcher.Changes) {
-	for change := range changes {
-		if change.IsErr() {
-			log.Println("An error occurred when getting changes for",
-				config.dirPath, "-", change.Err)
-			continue
-		}
-
-		verifier, err := locations.NewDataVerifier()
-		if err != nil {
-			log.Println("Failed to create Steam data verifier -", err.Error())
-			continue
-		}
-
-		idsToDirs, err := verifier.UserIdsToDataDirPaths()
-		if err != nil {
-			log.Println("Failed to get Steam user ID directories -", err.Error())
-			continue
-		}
-
-		// TODO: Use KnownGameSettings to figure out if a game was deleted and then remove the shortcut.
-
-		for _, updated := range change.UpdatedFilePaths {
-			if strings.HasPrefix(updated, *appSettingsDirPath) {
-				continue
-			}
-
-			log.Println("Game settings", updated, "was updated")
-
-			game, err := settings.LoadGameSettings(updated)
-			if err != nil {
-				log.Println("Failed to load game settings for", updated, "-", err.Error())
-				continue
-			}
-
-			l, ok := config.launchers.Has(game.Launcher())
-			if !ok {
-				log.Println("The specified launcher does not exist in the launchers settings - " + game.Launcher())
-				continue
-			}
-
-			for steamUserId := range idsToDirs {
-				shortcutsPath := locations.ShortcutsFilePath(verifier.RootDirPath(), steamUserId)
-
-				log.Println("Creating Steam shortcut for '" + game.Name() + "'...")
-
-				config := steamShortcutConfig{
-					shortcutsFilePath: shortcutsPath,
-					game:              game,
-					launcher:          l,
-					fileAccess:        config.steamShortcutsLock,
-				}
-
-				wasUpdated, err := createOrUpdateSteamShortcut(config)
-				if err != nil {
-					log.Println("Failed to create or update Steam shortcut for", game.Name(), "-", err.Error())
-					continue
-				}
-
-				if wasUpdated {
-					log.Println("Updated shortcut for", game.Name())
-				} else {
-					log.Println("Created shortcut for", game.Name())
-				}
-			}
-		}
-	}
-}
-
-func createOrUpdateSteamShortcut(config steamShortcutConfig) (bool, error) {
-	config.fileAccess.Lock()
-	defer config.fileAccess.Unlock()
-
-	var flags int
-	var fileAlreadyExists bool
-
-	_, statErr := os.Stat(config.shortcutsFilePath)
-	if statErr == nil {
-		flags = os.O_RDWR
-		fileAlreadyExists = true
-	} else {
-		flags = os.O_CREATE|os.O_RDWR
-	}
-
-	f, err := os.OpenFile(config.shortcutsFilePath, flags, 0600)
-	if err != nil {
-		return false, errors.New("Failed to open Steam shortcuts file - " + err.Error())
-	}
-	defer f.Close()
-
-	var scs []shortcuts.Shortcut
-
-	if fileAlreadyExists {
-		scs, err = shortcuts.Shortcuts(f)
-		if err != nil {
-			return false, err
-		}
-
-		_, err = f.Seek(0, 0)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	var options string
-
-	if config.game.ShouldOverrideLauncherArgs() {
-		options = config.game.LauncherOverrideArgs()
-	} else {
-		options = config.launcher.DefaultArgs() + " " + config.game.AdditionalLauncherArgs()
-	}
-
-	options = options + " " + config.game.ExePath(true)
-
-	var updated bool
-
-	for i := range scs {
-		if scs[i].AppName == config.game.Name() {
-			scs[i].StartDir = config.launcher.ExeDirPath()
-			scs[i].ExePath = config.launcher.ExePath()
-			scs[i].LaunchOptions = options
-			scs[i].IconPath = config.game.IconPath()
-			scs[i].Tags = config.game.Categories()
-
-			updated = true
-			break
-		}
-	}
-
-	if !updated {
-		s := shortcuts.Shortcut{
-			Id:            len(scs),
-			AppName:       config.game.Name(),
-			ExePath:       config.launcher.ExePath(),
-			StartDir:      config.launcher.ExeDirPath(),
-			IconPath:      config.game.IconPath(),
-			LaunchOptions: options,
-			Tags:          config.game.Categories(),
-		}
-
-		scs = append(scs, s)
-	}
-
-	err = shortcuts.WriteVdfV1(scs, f)
-	if err != nil {
-		return false, err
-	}
-
-	return updated, nil
 }
