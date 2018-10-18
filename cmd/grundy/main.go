@@ -20,7 +20,20 @@ const (
 	helpArg               = "h"
 )
 
-type steamShortcutsConfig struct {
+type primarySettings struct {
+	app                settings.AppSettings
+	launchers          settings.LaunchersSettings
+	steamShortuctsLock *sync.Mutex
+	dirPathsToWatchers map[string]watcher.Watcher
+}
+
+type gameCollectionWatcherConfig struct {
+	dirPath            string
+	launchers          settings.LaunchersSettings
+	steamShortcutsLock *sync.Mutex
+}
+
+type steamShortcutConfig struct {
 	shortcutsFilePath string
 	game              settings.GameSettings
 	launcher          settings.Launcher
@@ -32,7 +45,6 @@ var (
 	help               = flag.Bool(helpArg, false, "Show this help information")
 )
 
-// TODO: Need to cleanup function inputs and Steam file access.
 func main() {
 	flag.Parse()
 
@@ -84,28 +96,32 @@ func main() {
 
 	mainSettingsWatcher.Start()
 
-	mainLoop(appSettings, launchersSettings, mainWatcherConfig.Changes)
+	primary := &primarySettings{
+		app:                appSettings,
+		launchers:          launchersSettings,
+		steamShortuctsLock: &sync.Mutex{},
+		dirPathsToWatchers: make(map[string]watcher.Watcher),
+	}
+
+	mainLoop(primary, mainWatcherConfig.Changes)
 }
 
-func mainLoop(app settings.AppSettings, launchers settings.LaunchersSettings, changes chan watcher.Changes) {
-	dirPathsToWatchers := make(map[string]watcher.Watcher)
-	steamShortcutsLock := &sync.Mutex{}
-
+func mainLoop(primary *primarySettings, changes chan watcher.Changes) {
 	for change := range changes {
 		for _, filePath := range change.UpdatedFilePaths {
 			log.Println("Main settings file has been updated:", filePath)
 
 			switch path.Base(filePath) {
-			case app.Filename(""):
-				err := app.Reload(filePath)
+			case primary.app.Filename(""):
+				err := primary.app.Reload(filePath)
 				if err != nil {
 					log.Println("Failed to load application settings -", err.Error())
 					continue
 				}
 
-				updateSubDirWatchers(dirPathsToWatchers, app, launchers, steamShortcutsLock)
-			case launchers.Filename(""):
-				err := launchers.Reload(filePath)
+				updateGameCollectionWatchers(primary)
+			case primary.launchers.Filename(""):
+				err := primary.launchers.Reload(filePath)
 				if err != nil {
 					log.Println("Failed to load application settings -", err.Error())
 					continue
@@ -115,11 +131,11 @@ func mainLoop(app settings.AppSettings, launchers settings.LaunchersSettings, ch
 	}
 }
 
-func updateSubDirWatchers(dirPathsToWatchers map[string]watcher.Watcher, app settings.AppSettings, launchers settings.LaunchersSettings, steamShortcutsLock *sync.Mutex) {
-	watchDirs := app.WatchPaths()
+func updateGameCollectionWatchers(primary *primarySettings) {
+	watchDirs := primary.app.WatchPaths()
 
 	OUTER:
-	for dirPath, currentWatcher := range dirPathsToWatchers {
+	for dirPath, currentWatcher := range primary.dirPathsToWatchers {
 		for _, newDirPath := range watchDirs {
 			if dirPath == newDirPath {
 				continue OUTER
@@ -130,16 +146,22 @@ func updateSubDirWatchers(dirPathsToWatchers map[string]watcher.Watcher, app set
 
 		currentWatcher.Destroy()
 
-		delete(dirPathsToWatchers, dirPath)
+		delete(primary.dirPathsToWatchers, dirPath)
 	}
 
 	for _, dirPath := range watchDirs {
-		_, ok := dirPathsToWatchers[dirPath]
+		_, ok := primary.dirPathsToWatchers[dirPath]
 		if ok {
 			continue
 		}
 
-		subDirWatcher, err := createSubDirWatcher(dirPath, launchers, steamShortcutsLock)
+		collectionWatcherConfig := gameCollectionWatcherConfig{
+			dirPath:            dirPath,
+			launchers:          primary.launchers,
+			steamShortcutsLock: primary.steamShortuctsLock,
+		}
+
+		w, err := createGameCollectionWatcher(collectionWatcherConfig)
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -147,34 +169,35 @@ func updateSubDirWatchers(dirPathsToWatchers map[string]watcher.Watcher, app set
 
 		log.Println("Now watching subdirectories in", dirPath)
 
-		dirPathsToWatchers[dirPath] = subDirWatcher
+		primary.dirPathsToWatchers[dirPath] = w
 	}
 }
 
-func createSubDirWatcher(dirPath string, launchers settings.LaunchersSettings, steamShortcutsLock *sync.Mutex) (watcher.Watcher, error) {
+func createGameCollectionWatcher(config gameCollectionWatcherConfig) (watcher.Watcher, error) {
 	watcherConfig := watcher.Config{
 		ScanFunc:    watcher.ScanFilesInSubdirectories,
-		RootDirPath: dirPath,
+		RootDirPath: config.dirPath,
 		FileSuffix:  settings.FileExtension,
 		Changes:     make(chan watcher.Changes),
 	}
 
-	subDirWatcher, err := watcher.NewWatcher(watcherConfig)
+	w, err := watcher.NewWatcher(watcherConfig)
 	if err != nil {
-		return nil, errors.New("Failed to create watcher for " + dirPath + " - " + err.Error())
+		return nil, errors.New("Failed to create watcher for " + config.dirPath + " - " + err.Error())
 	}
 
-	subDirWatcher.Start()
+	w.Start()
 
-	go subDirWatcherLoop(watcherConfig, launchers, steamShortcutsLock)
+	go gameCollectionLooper(config, watcherConfig.Changes)
 
-	return subDirWatcher, nil
+	return w, nil
 }
 
-func subDirWatcherLoop(config watcher.Config, launchers settings.LaunchersSettings, steamShortcutsLock *sync.Mutex) {
-	for change := range config.Changes {
+func gameCollectionLooper(config gameCollectionWatcherConfig, changes chan watcher.Changes) {
+	for change := range changes {
 		if change.IsErr() {
-			log.Println("An error occurred when getting changes for", config.RootDirPath, "-", change.Err)
+			log.Println("An error occurred when getting changes for",
+				config.dirPath, "-", change.Err)
 			continue
 		}
 
@@ -205,7 +228,7 @@ func subDirWatcherLoop(config watcher.Config, launchers settings.LaunchersSettin
 				continue
 			}
 
-			l, ok := launchers.Has(game.Launcher())
+			l, ok := config.launchers.Has(game.Launcher())
 			if !ok {
 				log.Println("The specified launcher does not exist in the launchers settings - " + game.Launcher())
 				continue
@@ -216,11 +239,11 @@ func subDirWatcherLoop(config watcher.Config, launchers settings.LaunchersSettin
 
 				log.Println("Creating Steam shortcut for '" + game.Name() + "'...")
 
-				config := steamShortcutsConfig{
+				config := steamShortcutConfig{
 					shortcutsFilePath: shortcutsPath,
 					game:              game,
 					launcher:          l,
-					fileAccess:        steamShortcutsLock,
+					fileAccess:        config.steamShortcutsLock,
 				}
 
 				wasUpdated, err := createOrUpdateSteamShortcut(config)
@@ -239,7 +262,7 @@ func subDirWatcherLoop(config watcher.Config, launchers settings.LaunchersSettin
 	}
 }
 
-func createOrUpdateSteamShortcut(config steamShortcutsConfig) (bool, error) {
+func createOrUpdateSteamShortcut(config steamShortcutConfig) (bool, error) {
 	config.fileAccess.Lock()
 	defer config.fileAccess.Unlock()
 
