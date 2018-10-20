@@ -11,8 +11,11 @@ type configFile interface {
 	HasSection(section) bool
 	HasKey(section, key) bool
 	SectionKeys(section) []string
+	SectionValues(section) []string
+	SectionKeyAndValues(section) map[string]string
 	KeyValue(section, key) string
 	AddSection(section)
+	SetSectionComment(section, string)
 	AddValueToSection(section, string)
 	AddOrUpdateKeyValue(section, key, string)
 	DeleteSection(section)
@@ -82,6 +85,42 @@ func (o *iniConfigFile) SectionKeys(s section) []string {
 	return keys
 }
 
+func (o *iniConfigFile) SectionValues(s section) []string {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	sec, err := o.ini.GetSection(string(s))
+	if err != nil {
+		return []string{}
+	}
+
+	var values []string
+
+	for _, k := range sec.Keys() {
+		values = append(values, k.Value())
+	}
+
+	return values
+}
+
+func (o *iniConfigFile) SectionKeysToValues(s section) map[string]string {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	m := make(map[string]string)
+
+	sec, err := o.ini.GetSection(string(s))
+	if err != nil {
+		return m
+	}
+
+	for _, k := range sec.Keys() {
+		m[k.Name()] = k.Value()
+	}
+
+	return m
+}
+
 func (o *iniConfigFile) KeyValue(s section, k key) string {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
@@ -111,6 +150,18 @@ func (o *iniConfigFile) AddSection(s section) {
 	if err != nil {
 		return
 	}
+}
+
+func (o *iniConfigFile) SetSectionComment(s section, comment string) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	sec, err := o.ini.GetSection(string(s))
+	if err != nil {
+		return
+	}
+
+	sec.Comment = comment
 }
 
 func (o *iniConfigFile) AddValueToSection(s section, v string) {
