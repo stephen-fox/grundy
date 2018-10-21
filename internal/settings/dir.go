@@ -9,9 +9,9 @@ import (
 
 const (
 	defaultDirMode         = 0755
+	defaultSettingsDirname = ".grundy"
 	logFilesDirName        = "logs"
 	internalDirName        = ".internal"
-	defaultSettingsDirname = ".grundy"
 )
 
 func DirPath() string {
@@ -24,6 +24,10 @@ func DirPath() string {
 		parentPath = os.Getenv("HOME")
 	case "windows":
 		parentPath = strings.Replace(os.Getenv("USERPROFILE"), "\\", "/", -1)
+	}
+
+	if len(strings.TrimSpace(parentPath)) == 0 {
+		return "./" + defaultSettingsDirname
 	}
 
 	return path.Join(parentPath, defaultSettingsDirname)
