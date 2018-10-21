@@ -3,50 +3,47 @@
 package dman
 
 import (
-	"github.com/takama/daemon"
-	"github.com/stephen-fox/userutil"
+	"errors"
 )
 
 type unixManager struct{
-	d daemon.Daemon
+	config Config
 }
 
-func (o *unixManager) DoManagementCommand(command string) (string, error) {
+func (o *unixManager) Config() Config {
+	return o.config
+}
+
+func (o *unixManager) DoManagementCommand(command string) (Status, error) {
 	return doManagementCommand(o, command)
 }
 
-func (o *unixManager) Install() (string, error) {
-	return o.d.Install()
+func (o *unixManager) ReinstallAndStart() error {
+	return errors.New("Not implemented for *nix systems")
 }
 
-func (o *unixManager) Remove() (string, error) {
-	return o.d.Remove()
+func (o *unixManager) Install() error {
+	return errors.New("Not implemented for *nix systems")
 }
 
-func (o *unixManager) Start() (string, error) {
-	return o.d.Start()
+func (o *unixManager) Remove() error {
+	return errors.New("Not implemented for *nix systems")
 }
 
-func (o *unixManager) Stop() (string, error) {
-	return o.d.Stop()
+func (o *unixManager) Start() error {
+	return errors.New("Not implemented for *nix systems")
 }
 
-func (o *unixManager) Status() (string, error) {
-	return o.d.Status()
+func (o *unixManager) Stop() error {
+	return errors.New("Not implemented for *nix systems")
 }
 
-func NewManager() (Manager, error) {
-	err := userutil.IsRoot()
-	if err != nil {
-		return &unixManager{}, err
-	}
+func (o *unixManager) Status() (Status, error) {
+	return Unknown, errors.New("Not implemented for *nix systems")
+}
 
-	d, err := daemon.New(name, description)
-	if err != nil {
-		return &unixManager{}, err
-	}
-
+func NewManager(config Config) (Manager, error) {
 	return &unixManager{
-		d: d,
-	}, nil
+		config: config,
+	}, errors.New("Daemon functionalty not currently support on *nix systems")
 }
