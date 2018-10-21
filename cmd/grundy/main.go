@@ -9,6 +9,7 @@ import (
 
 	"github.com/stephen-fox/grundy/internal/gcw"
 	"github.com/stephen-fox/grundy/internal/settings"
+	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
 )
 
@@ -18,10 +19,11 @@ const (
 )
 
 type primarySettings struct {
-	app                settings.AppSettings
-	launchers          settings.LaunchersSettings
-	steamShortuctsLock *sync.Mutex
-	dirPathsToWatchers map[string]watcher.Watcher
+	app                 settings.AppSettings
+	launchers           settings.LaunchersSettings
+	knownGames          settings.KnownGamesSettings
+	steamShortuctsMutex *sync.Mutex
+	dirPathsToWatchers  map[string]watcher.Watcher
 }
 
 var (
@@ -40,18 +42,18 @@ func main() {
 	launchersSettings := settings.NewLaunchersSettings()
 	launchersSettings.AddOrUpdate(settings.NewLauncher())
 	appSettings := settings.NewAppSettings()
-	gameSettings := settings.NewGameSettings()
+	exampleGameSettings := settings.NewGameSettings()
 
 	saveableToShouldCreateInSettingsDir := map[settings.SaveableSettings]bool{
-		launchersSettings: true,
-		appSettings:       true,
-		gameSettings:      false,
+		launchersSettings:   true,
+		appSettings:         true,
+		exampleGameSettings: false,
 	}
 
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
 		err := settings.Create(*appSettingsDirPath + "/examples", settings.ExampleSuffix, s)
 		if err != nil {
-			log.Fatal("Failed to create default application settings files - " + err.Error())
+			log.Fatal("Failed to create example application settings files - " + err.Error())
 		}
 
 		if createInMainDir {
@@ -80,14 +82,68 @@ func main() {
 
 	mainSettingsWatcher.Start()
 
+	steamShortcutsMutex := &sync.Mutex{}
+
+	knownGameSettings, loaded := settings.LoadOrCreateKnownGamesSettings()
+	if loaded {
+		log.Println("Loaded existing known game settings")
+
+		err := cleanupKnownGameShortcuts(steamShortcutsMutex, knownGameSettings)
+		if err != nil {
+			log.Println("Failed to cleanup known game shortcuts -", err.Error())
+		}
+	}
+
 	primary := &primarySettings{
-		app:                appSettings,
-		launchers:          launchersSettings,
-		steamShortuctsLock: &sync.Mutex{},
-		dirPathsToWatchers: make(map[string]watcher.Watcher),
+		app:                 appSettings,
+		launchers:           launchersSettings,
+		knownGames:          knownGameSettings,
+		steamShortuctsMutex: steamShortcutsMutex,
+		dirPathsToWatchers:  make(map[string]watcher.Watcher),
 	}
 
 	mainLoop(primary, mainWatcherConfig.Changes)
+}
+
+func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownGamesSettings) error {
+	var targets []string
+
+	m := knownGames.RemoveNonExistingConfigs()
+
+	if len(m) == 0 {
+		return nil
+	}
+
+	for _, gameName := range m {
+		targets = append(targets, gameName)
+	}
+
+	info, err := steamw.NewSteamDataInfo()
+	if err != nil {
+		return err
+	}
+
+	config := steamw.DeleteShortcutConfig{
+		GameNames:  targets,
+		Info:       info,
+		FileAccess: fileMutex,
+	}
+
+	result := steamw.DeleteShortcutPerId(config)
+
+	for id, deleted := range result.IdsToDeletedGames {
+		log.Println("Deleted shortcut for", deleted, "for Steam ID", id)
+	}
+
+	for id, notDeleted := range result.IdsToNotDeletedGames {
+		log.Println("Deleted shortcut for", notDeleted, "does not exist for Steam ID", id)
+	}
+
+	for id, err := range result.IdsToFailures {
+		log.Println("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
+	}
+
+	return nil
 }
 
 func mainLoop(primary *primarySettings, changes chan watcher.Changes) {
@@ -140,10 +196,11 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 		}
 
 		collectionWatcherConfig := &gcw.WatcherConfig{
-			AppSettingsDirPath: *appSettingsDirPath,
-			DirPath:            dirPath,
-			Launchers:          primary.launchers,
-			SteamShortcutsLock: primary.steamShortuctsLock,
+			AppSettingsDirPath:  *appSettingsDirPath,
+			DirPath:             dirPath,
+			Launchers:           primary.launchers,
+			KnownGames:          primary.knownGames,
+			SteamShortcutsMutex: primary.steamShortuctsMutex,
 		}
 
 		w, err := gcw.NewGameCollectionWatcher(collectionWatcherConfig)

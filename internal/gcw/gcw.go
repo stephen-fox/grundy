@@ -3,13 +3,11 @@ package gcw
 import (
 	"errors"
 	"log"
-	"os"
 	"strings"
 	"sync"
 
 	"github.com/stephen-fox/grundy/internal/settings"
-	"github.com/stephen-fox/steamutil/locations"
-	"github.com/stephen-fox/steamutil/shortcuts"
+	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
 )
 
@@ -40,103 +38,114 @@ func (o *gameCollectionWatcher) gameCollectionLooper() {
 			continue
 		}
 
-		verifier, err := locations.NewDataVerifier()
+		info, err := steamw.NewSteamDataInfo()
 		if err != nil {
-			log.Println("Failed to create Steam data verifier -", err.Error())
+			log.Println("Failed to get Steam information -", err.Error())
 			continue
 		}
 
-		idsToDirs, err := verifier.UserIdsToDataDirPaths()
-		if err != nil {
-			log.Println("Failed to get Steam user ID directories -", err.Error())
-			continue
-		}
+		o.deleteShortcuts(change.DeletedFilePaths, info)
 
-		data := steamData{
-			dataLocations: verifier,
-			idsToDirPaths: idsToDirs,
-		}
-
-		// TODO: Use KnownGameSettings to figure out if a game was deleted and then remove the shortcut.
-
-		o.createOrUpdateShortcuts(change.UpdatedFilePaths, data)
+		o.createOrUpdateShortcuts(change.UpdatedFilePaths, info)
 	}
 }
 
-func (o *gameCollectionWatcher) createOrUpdateShortcuts(filePaths []string, data steamData) []settings.GameSettings {
-	var games []settings.GameSettings
+func (o *gameCollectionWatcher) deleteShortcuts(filePaths []string, info steamw.DataInfo) {
+	for _, deleted := range filePaths {
+		if strings.HasPrefix(deleted, o.config.AppSettingsDirPath) {
+			continue
+		}
 
+		log.Println("Game settings file", deleted, "was deleted")
+
+		gameName, ok := o.config.KnownGames.Remove(deleted)
+		if ok {
+			log.Println("Deleting shortcut for", gameName + "...")
+
+			config := steamw.DeleteShortcutConfig{
+				GameNames:  []string{gameName},
+				Info:       info,
+				FileAccess: o.config.SteamShortcutsMutex,
+			}
+
+			result := steamw.DeleteShortcutPerId(config)
+
+			for id, deleted := range result.IdsToDeletedGames {
+				log.Println("Deleted shortcut for", deleted, "for Steam ID", id)
+			}
+
+			for id, notDeleted := range result.IdsToNotDeletedGames {
+				log.Println("Shortcut for", notDeleted, "does not exist for Steam ID", id)
+			}
+
+			for id, err := range result.IdsToFailures {
+				log.Println("Failed to delete shortcut for Steam user ID", id, "-", err.Error())
+			}
+		}
+	}
+}
+
+func (o *gameCollectionWatcher) createOrUpdateShortcuts(filePaths []string, info steamw.DataInfo) {
 	for _, updated := range filePaths {
 		if strings.HasPrefix(updated, o.config.AppSettingsDirPath) {
 			continue
 		}
 
-		log.Println("Game settings", updated, "was updated")
+		log.Println("Game settings file '" + updated + "' was updated")
 
 		game, err := settings.LoadGameSettings(updated)
 		if err != nil {
-			log.Println("Failed to load game settings for", updated, "-", err.Error())
+			log.Println("Failed to load game settings for",
+				updated, "-", err.Error())
 			continue
 		}
 
 		l, ok := o.config.Launchers.Has(game.Launcher())
 		if !ok {
-			log.Println("The specified launcher does not exist in the launchers settings - " + game.Launcher())
+			log.Println("The specified launcher does not " +
+				"exist in the launchers settings - '" + game.Launcher() + "'")
 			continue
 		}
 
-		o.createOrUpdateSteamShortcutPerId(game, l, data)
+		ok = o.config.KnownGames.AddUniqueGameOnly(game, updated)
+		if !ok {
+			log.Println("The game '" + game.Name() +
+				"' already exists, and will not be added to Steam")
+			continue
+		}
 
-		games = append(games, game)
-	}
-
-	return games
-}
-
-func (o *gameCollectionWatcher) createOrUpdateSteamShortcutPerId(game settings.GameSettings, l settings.Launcher, data steamData) {
-	for steamUserId := range data.idsToDirPaths {
-		shortcutsPath := locations.ShortcutsFilePath(data.dataLocations.RootDirPath(), steamUserId)
+		config := steamw.NewShortcutConfig{
+			Game:       game,
+			Launcher:   l,
+			Info:       info,
+			FileAccess: o.config.SteamShortcutsMutex,
+		}
 
 		log.Println("Creating Steam shortcut for '" + game.Name() + "'...")
 
-		config := steamShortcutConfig{
-			shortcutsFilePath: shortcutsPath,
-			game:              game,
-			launcher:          l,
-			fileAccess:        o.config.SteamShortcutsLock,
+		result := steamw.CreateOrUpdateShortcutPerId(config)
+
+		for _, c := range result.CreatedForIds {
+			log.Println("Created shortcut to", game.Name(), "forSteam user ID", c)
 		}
 
-		wasUpdated, err := createOrUpdateSteamShortcut(config)
-		if err != nil {
-			log.Println("Failed to create or update Steam shortcut for", game.Name(), "-", err.Error())
-			continue
+		for _, u := range result.UpdatedForIds {
+			log.Println("Updated shortcut to", game.Name(), "for Steam user ID", u)
 		}
 
-		if wasUpdated {
-			log.Println("Updated shortcut for", game.Name())
-		} else {
-			log.Println("Created shortcut for", game.Name())
+		for f, err := range result.IdsToFailures {
+			log.Println("Failed to create shortcut to", game.Name(),
+				"for Steam user ID", f, "-", err.Error())
 		}
 	}
 }
 
 type WatcherConfig struct {
-	AppSettingsDirPath string
-	DirPath            string
-	Launchers          settings.LaunchersSettings
-	SteamShortcutsLock *sync.Mutex
-}
-
-type steamData struct {
-	dataLocations locations.DataVerifier
-	idsToDirPaths map[string]string
-}
-
-type steamShortcutConfig struct {
-	shortcutsFilePath string
-	game              settings.GameSettings
-	launcher          settings.Launcher
-	fileAccess        *sync.Mutex
+	AppSettingsDirPath  string
+	DirPath             string
+	Launchers           settings.LaunchersSettings
+	KnownGames          settings.KnownGamesSettings
+	SteamShortcutsMutex *sync.Mutex
 }
 
 func NewGameCollectionWatcher(config *WatcherConfig) (watcher.Watcher, error) {
@@ -157,86 +166,4 @@ func NewGameCollectionWatcher(config *WatcherConfig) (watcher.Watcher, error) {
 		config:  config,
 		changes: watcherConfig.Changes,
 	}, nil
-}
-
-func createOrUpdateSteamShortcut(config steamShortcutConfig) (bool, error) {
-	config.fileAccess.Lock()
-	defer config.fileAccess.Unlock()
-
-	var flags int
-	var fileAlreadyExists bool
-
-	_, statErr := os.Stat(config.shortcutsFilePath)
-	if statErr == nil {
-		flags = os.O_RDWR
-		fileAlreadyExists = true
-	} else {
-		flags = os.O_CREATE|os.O_RDWR
-	}
-
-	f, err := os.OpenFile(config.shortcutsFilePath, flags, 0600)
-	if err != nil {
-		return false, errors.New("Failed to open Steam shortcuts file - " + err.Error())
-	}
-	defer f.Close()
-
-	var scs []shortcuts.Shortcut
-
-	if fileAlreadyExists {
-		scs, err = shortcuts.Shortcuts(f)
-		if err != nil {
-			return false, err
-		}
-
-		_, err = f.Seek(0, 0)
-		if err != nil {
-			return false, err
-		}
-	}
-
-	var options string
-
-	if config.game.ShouldOverrideLauncherArgs() {
-		options = config.game.LauncherOverrideArgs()
-	} else {
-		options = config.launcher.DefaultArgs() + " " + config.game.AdditionalLauncherArgs()
-	}
-
-	options = options + " " + config.game.ExePath(true)
-
-	var updated bool
-
-	for i := range scs {
-		if scs[i].AppName == config.game.Name() {
-			scs[i].StartDir = config.launcher.ExeDirPath()
-			scs[i].ExePath = config.launcher.ExePath()
-			scs[i].LaunchOptions = options
-			scs[i].IconPath = config.game.IconPath()
-			scs[i].Tags = config.game.Categories()
-
-			updated = true
-			break
-		}
-	}
-
-	if !updated {
-		s := shortcuts.Shortcut{
-			Id:            len(scs),
-			AppName:       config.game.Name(),
-			ExePath:       config.launcher.ExePath(),
-			StartDir:      config.launcher.ExeDirPath(),
-			IconPath:      config.game.IconPath(),
-			LaunchOptions: options,
-			Tags:          config.game.Categories(),
-		}
-
-		scs = append(scs, s)
-	}
-
-	err = shortcuts.WriteVdfV1(scs, f)
-	if err != nil {
-		return false, err
-	}
-
-	return updated, nil
 }
