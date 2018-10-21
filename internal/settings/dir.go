@@ -28,7 +28,7 @@ func DirPath() string {
 	return path.Join(parentPath, defaultSettingsDirname)
 }
 
-func CreateInternalDirPath(settingsDirPath string) (string, error) {
+func CreateInternalFilesDir(settingsDirPath string) (string, error) {
 	dirPath := path.Join(settingsDirPath, internalDirName)
 
 	err := CreateDir(dirPath)

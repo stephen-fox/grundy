@@ -104,7 +104,7 @@ func main() {
 
 	steamShortcutsMutex := &sync.Mutex{}
 
-	internalDirPath, err := settings.CreateInternalDirPath(*appSettingsDirPath)
+	internalDirPath, err := settings.CreateInternalFilesDir(*appSettingsDirPath)
 	if err != nil {
 		log.Fatal("Failed to create internal settings directory path - " + err.Error())
 	}
