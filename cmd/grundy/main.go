@@ -5,15 +5,18 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/stephen-fox/grundy/internal/gcw"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
+	"github.com/stephen-fox/grundy/internal/dman"
 )
 
 const (
+	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
 	helpArg               = "h"
 )
@@ -27,6 +30,7 @@ type primarySettings struct {
 }
 
 var (
+	daemonCommand      = flag.String(daemonCommandArg, "", "Manage the application's daemon with one of the following commands:\n" + dman.AvailableManagementCommands())
 	appSettingsDirPath = flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
 	help               = flag.Bool(helpArg, false, "Show this help information")
 )
@@ -36,6 +40,22 @@ func main() {
 
 	if *help {
 		flag.PrintDefaults()
+		os.Exit(0)
+	}
+
+	if len(strings.TrimSpace(*daemonCommand)) > 0 {
+		daemonManager, err := dman.NewManager()
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		status, err := daemonManager.DoManagementCommand(*daemonCommand)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		log.Println("Daemon status - " + status)
+
 		os.Exit(0)
 	}
 
