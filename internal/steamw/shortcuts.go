@@ -72,17 +72,11 @@ func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 	config.FileAccess.Lock()
 	defer config.FileAccess.Unlock()
 
-	//var flags int
 	var fileAlreadyExists bool
-
-	// TODO: This can probably be replaced with 'flags = os.O_RDWR|os.O_CREATE'.
-	//_, statErr := os.Stat(shortcutsFilePath)
-	//if statErr == nil {
-	//	flags = os.O_RDWR
-	//	fileAlreadyExists = true
-	//} else {
-	//	flags = os.O_CREATE|os.O_RDWR
-	//}
+	_, statErr := os.Stat(shortcutsFilePath)
+	if statErr == nil {
+		fileAlreadyExists = true
+	}
 
 	f, err := os.OpenFile(shortcutsFilePath, os.O_RDWR|os.O_CREATE, defaultShortcutsFileMode)
 	if err != nil {
