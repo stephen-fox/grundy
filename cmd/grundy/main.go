@@ -84,7 +84,12 @@ func main() {
 
 	steamShortcutsMutex := &sync.Mutex{}
 
-	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings()
+	internalDirPath, err := settings.CreateInternalDirPath(*appSettingsDirPath)
+	if err != nil {
+		log.Fatal("Failed to create internal settings directory path - " + err.Error())
+	}
+
+	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings(internalDirPath)
 	if loaded {
 		log.Println("Loaded existing known game settings")
 
