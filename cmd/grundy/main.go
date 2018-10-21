@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"io"
 	"log"
@@ -14,15 +15,23 @@ import (
 	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
 	"github.com/stephen-fox/grundy/internal/dman"
+	"github.com/kardianos/service"
 )
 
 const (
+	name        = "grundy"
+	description = "Grundy crushes your games into Steam shortcuts " +
+		"so you do not have to! Please refer to the usage documentation " +
+		"at https://github.com/stephen-fox/grundy for more information."
+
 	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
 	helpArg               = "h"
 )
 
 type primarySettings struct {
+	watcher             watcher.Watcher
+	watcherConfig       watcher.Config
 	app                 settings.AppSettings
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
@@ -35,6 +44,21 @@ var (
 	appSettingsDirPath = flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
 	help               = flag.Bool(helpArg, false, "Show this help information")
 )
+
+type runner struct {
+	primary *primarySettings
+	stop    chan struct{}
+}
+
+func (o *runner) Start(s service.Service) error {
+	go mainLoop(o.primary, o.stop)
+	return nil
+}
+
+func (o *runner) Stop(s service.Service) error {
+	o.stop <- struct{}{}
+	return nil
+}
 
 func main() {
 	flag.Parse()
@@ -52,22 +76,66 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
+	primary, err := setupPrimarySettings()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	serviceConfig := &service.Config{
+		Name:        name,
+		DisplayName: name,
+		Description: description,
+		Arguments:   []string{
+			"-" + appSettingsDirPathArg,
+			*appSettingsDirPath,
+		},
+	}
+
+	r := &runner{
+		primary: primary,
+		stop:    make(chan struct{}),
+	}
+
+	s, err := service.New(r, serviceConfig)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
-		daemonManager, err := dman.NewManager()
-		if err != nil {
-			log.Fatal(err.Error())
-		}
+		*daemonCommand = strings.ToLower(*daemonCommand)
+		if *daemonCommand == "status" {
+			status, err := s.Status()
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 
-		status, err := daemonManager.DoManagementCommand(*daemonCommand)
-		if err != nil {
-			log.Fatal(err.Error())
+			switch status {
+			case service.StatusRunning:
+				log.Println("Daemon status - running")
+			case service.StatusStopped:
+				log.Println("Daemon status - stopped")
+			case service.StatusUnknown:
+				log.Println("Daemon status - unknown")
+			default:
+				log.Println("Daemon status could not be determined")
+			}
+		} else {
+			err = service.Control(s, *daemonCommand)
+			if err != nil {
+				log.Fatal(err.Error())
+			}
 		}
-
-		log.Println("Daemon status - " + status)
 
 		os.Exit(0)
 	}
 
+	err = s.Run()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+func setupPrimarySettings() (*primarySettings, error) {
 	launchers := settings.NewLaunchersSettings()
 	launchers.AddOrUpdate(settings.NewLauncher())
 	app := settings.NewAppSettings()
@@ -82,7 +150,7 @@ func main() {
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
 		err := settings.Create(*appSettingsDirPath + "/examples", settings.ExampleSuffix, s)
 		if err != nil {
-			log.Fatal("Failed to create example application settings files - " + err.Error())
+			return &primarySettings{}, errors.New("Failed to create example application settings files - " + err.Error())
 		}
 
 		if createInMainDir {
@@ -90,9 +158,24 @@ func main() {
 			if statErr != nil {
 				err := settings.Create(*appSettingsDirPath, "", s)
 				if err != nil {
-					log.Fatal(err.Error())
+					return &primarySettings{}, err
 				}
 			}
+		}
+	}
+
+	internalDirPath, err := settings.CreateInternalFilesDir(*appSettingsDirPath)
+	if err != nil {
+		return &primarySettings{}, errors.New("Failed to create internal settings directory path - " + err.Error())
+	}
+
+	steamShortcutsMutex := &sync.Mutex{}
+
+	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings(internalDirPath)
+	if loaded {
+		err := cleanupKnownGameShortcuts(steamShortcutsMutex, knownGames)
+		if err != nil {
+			log.Println("Failed to cleanup known game shortcuts -", err.Error())
 		}
 	}
 
@@ -105,38 +188,18 @@ func main() {
 
 	primarySettingsWatcher, err := watcher.NewWatcher(primarySettingsWatcherConfig)
 	if err != nil {
-		log.Fatal("Failed to watch application settings directory for changes")
-	}
-	defer primarySettingsWatcher.Stop()
-
-	primarySettingsWatcher.Start()
-
-	steamShortcutsMutex := &sync.Mutex{}
-
-	internalDirPath, err := settings.CreateInternalFilesDir(*appSettingsDirPath)
-	if err != nil {
-		log.Fatal("Failed to create internal settings directory path - " + err.Error())
+		return &primarySettings{}, errors.New("Failed to watch application settings directory for changes - " + err.Error())
 	}
 
-	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings(internalDirPath)
-	if loaded {
-		log.Println("Loaded existing known game settings")
-
-		err := cleanupKnownGameShortcuts(steamShortcutsMutex, knownGames)
-		if err != nil {
-			log.Println("Failed to cleanup known game shortcuts -", err.Error())
-		}
-	}
-
-	primary := &primarySettings{
+	return &primarySettings{
+		watcherConfig:       primarySettingsWatcherConfig,
+		watcher:             primarySettingsWatcher,
 		app:                 app,
 		launchers:           launchers,
 		knownGames:          knownGames,
 		steamShortcutsMutex: steamShortcutsMutex,
 		dirPathsToWatchers:  make(map[string]watcher.Watcher),
-	}
-
-	mainLoop(primary, primarySettingsWatcherConfig.Changes)
+	}, nil
 }
 
 func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownGamesSettings) error {
@@ -180,27 +243,35 @@ func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownG
 	return nil
 }
 
-func mainLoop(primary *primarySettings, changes chan watcher.Changes) {
-	for change := range changes {
-		for _, filePath := range change.UpdatedFilePaths {
-			log.Println("Main settings file has been updated:", filePath)
+func mainLoop(primary *primarySettings, stop chan struct{}) {
+	primary.watcher.Start()
 
-			switch path.Base(filePath) {
-			case primary.app.Filename(""):
-				err := primary.app.Reload(filePath)
-				if err != nil {
-					log.Println("Failed to load application settings -", err.Error())
-					continue
-				}
+	for {
+		select {
+		case change := <- primary.watcherConfig.Changes:
+			for _, filePath := range change.UpdatedFilePaths {
+				log.Println("Main settings file has been updated:", filePath)
 
-				updateGameCollectionWatchers(primary)
-			case primary.launchers.Filename(""):
-				err := primary.launchers.Reload(filePath)
-				if err != nil {
-					log.Println("Failed to load application settings -", err.Error())
-					continue
+				switch path.Base(filePath) {
+				case primary.app.Filename(""):
+					err := primary.app.Reload(filePath)
+					if err != nil {
+						log.Println("Failed to load application settings -", err.Error())
+						continue
+					}
+
+					updateGameCollectionWatchers(primary)
+				case primary.launchers.Filename(""):
+					err := primary.launchers.Reload(filePath)
+					if err != nil {
+						log.Println("Failed to load application settings -", err.Error())
+						continue
+					}
 				}
 			}
+		case <-stop:
+			primary.watcher.Destroy()
+			return
 		}
 	}
 }
