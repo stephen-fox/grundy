@@ -14,7 +14,6 @@ import (
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
-	"github.com/stephen-fox/grundy/internal/dman"
 	"github.com/kardianos/service"
 )
 
@@ -40,7 +39,7 @@ type primarySettings struct {
 }
 
 var (
-	daemonCommand      = flag.String(daemonCommandArg, "", "Manage the application's daemon with one of the following commands:\n" + dman.AvailableManagementCommands())
+	daemonCommand      = flag.String(daemonCommandArg, "", "Manage the application's daemon")
 	appSettingsDirPath = flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
 	help               = flag.Bool(helpArg, false, "Show this help information")
 )
