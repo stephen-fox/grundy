@@ -22,7 +22,7 @@ type primarySettings struct {
 	app                 settings.AppSettings
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
-	steamShortuctsMutex *sync.Mutex
+	steamShortcutsMutex *sync.Mutex
 	dirPathsToWatchers  map[string]watcher.Watcher
 }
 
@@ -103,7 +103,7 @@ func main() {
 		app:                 app,
 		launchers:           launchers,
 		knownGames:          knownGames,
-		steamShortuctsMutex: steamShortcutsMutex,
+		steamShortcutsMutex: steamShortcutsMutex,
 		dirPathsToWatchers:  make(map[string]watcher.Watcher),
 	}
 
@@ -205,7 +205,7 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 			DirPath:             dirPath,
 			Launchers:           primary.launchers,
 			KnownGames:          primary.knownGames,
-			SteamShortcutsMutex: primary.steamShortuctsMutex,
+			SteamShortcutsMutex: primary.steamShortcutsMutex,
 		}
 
 		w, err := gcw.NewGameCollectionWatcher(collectionWatcherConfig)
