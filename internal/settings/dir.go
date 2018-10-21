@@ -9,6 +9,7 @@ import (
 
 const (
 	defaultDirMode         = 0755
+	logFilesDirName        = "logs"
 	internalDirName        = ".internal"
 	defaultSettingsDirname = ".grundy"
 )
@@ -30,6 +31,17 @@ func DirPath() string {
 
 func CreateInternalFilesDir(settingsDirPath string) (string, error) {
 	dirPath := path.Join(settingsDirPath, internalDirName)
+
+	err := CreateDir(dirPath)
+	if err != nil {
+		return "", err
+	}
+
+	return dirPath, nil
+}
+
+func CreateLogFilesDir(settingsDirPath string) (string, error) {
+	dirPath := path.Join(settingsDirPath, logFilesDirName)
 
 	err := CreateDir(dirPath)
 	if err != nil {

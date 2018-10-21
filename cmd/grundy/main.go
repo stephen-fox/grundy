@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log"
 	"os"
 	"path"
@@ -42,6 +43,14 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
+
+	logFile, err := settings.LogFile(*appSettingsDirPath)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer logFile.Close()
+
+	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
 		daemonManager, err := dman.NewManager()
