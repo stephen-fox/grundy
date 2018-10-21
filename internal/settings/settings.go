@@ -415,6 +415,8 @@ func (o *defaultKnownGamesSettings) Save(w io.Writer) error {
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
+	o.config.SetSectionComment(none, managedFileComment)
+
 	return o.config.Save(w)
 }
 
