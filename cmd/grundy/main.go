@@ -39,15 +39,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	launchersSettings := settings.NewLaunchersSettings()
-	launchersSettings.AddOrUpdate(settings.NewLauncher())
-	appSettings := settings.NewAppSettings()
-	exampleGameSettings := settings.NewGameSettings()
+	launchers := settings.NewLaunchersSettings()
+	launchers.AddOrUpdate(settings.NewLauncher())
+	app := settings.NewAppSettings()
+	exampleGame := settings.NewGameSettings()
 
 	saveableToShouldCreateInSettingsDir := map[settings.SaveableSettings]bool{
-		launchersSettings:   true,
-		appSettings:         true,
-		exampleGameSettings: false,
+		launchers:   true,
+		app:         true,
+		exampleGame: false,
 	}
 
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
@@ -67,42 +67,42 @@ func main() {
 		}
 	}
 
-	mainWatcherConfig := watcher.Config{
+	primarySettingsWatcherConfig := watcher.Config{
 		ScanFunc:    watcher.ScanFilesInDirectory,
 		RootDirPath: *appSettingsDirPath,
 		FileSuffix:  settings.FileExtension,
 		Changes:     make(chan watcher.Changes),
 	}
 
-	mainSettingsWatcher, err := watcher.NewWatcher(mainWatcherConfig)
+	primarySettingsWatcher, err := watcher.NewWatcher(primarySettingsWatcherConfig)
 	if err != nil {
 		log.Fatal("Failed to watch application settings directory for changes")
 	}
-	defer mainSettingsWatcher.Stop()
+	defer primarySettingsWatcher.Stop()
 
-	mainSettingsWatcher.Start()
+	primarySettingsWatcher.Start()
 
 	steamShortcutsMutex := &sync.Mutex{}
 
-	knownGameSettings, loaded := settings.LoadOrCreateKnownGamesSettings()
+	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings()
 	if loaded {
 		log.Println("Loaded existing known game settings")
 
-		err := cleanupKnownGameShortcuts(steamShortcutsMutex, knownGameSettings)
+		err := cleanupKnownGameShortcuts(steamShortcutsMutex, knownGames)
 		if err != nil {
 			log.Println("Failed to cleanup known game shortcuts -", err.Error())
 		}
 	}
 
 	primary := &primarySettings{
-		app:                 appSettings,
-		launchers:           launchersSettings,
-		knownGames:          knownGameSettings,
+		app:                 app,
+		launchers:           launchers,
+		knownGames:          knownGames,
 		steamShortuctsMutex: steamShortcutsMutex,
 		dirPathsToWatchers:  make(map[string]watcher.Watcher),
 	}
 
-	mainLoop(primary, mainWatcherConfig.Changes)
+	mainLoop(primary, primarySettingsWatcherConfig.Changes)
 }
 
 func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownGamesSettings) error {
