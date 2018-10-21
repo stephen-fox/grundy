@@ -126,7 +126,7 @@ func (o *gameCollectionWatcher) createOrUpdateShortcuts(filePaths []string, info
 		result := steamw.CreateOrUpdateShortcutPerId(config)
 
 		for _, c := range result.CreatedForIds {
-			log.Println("Created shortcut to", game.Name(), "forSteam user ID", c)
+			log.Println("Created shortcut to", game.Name(), "for Steam user ID", c)
 		}
 
 		for _, u := range result.UpdatedForIds {
