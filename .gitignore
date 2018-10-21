@@ -4,3 +4,6 @@
 # JetBrains.
 *.iml
 .idea/
+
+# Binaries.
+*.exe
