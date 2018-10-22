@@ -23,7 +23,10 @@ func DirPath() string {
 	case "linux":
 		parentPath = os.Getenv("HOME")
 	case "windows":
-		parentPath = strings.Replace(os.Getenv("USERPROFILE"), "\\", "/", -1)
+		parentPath = strings.Replace(os.Getenv("ProgramData"), "\\", "/", -1)
+		if len(strings.TrimSpace(parentPath)) == 0 {
+			parentPath = "/ProgramData"
+		}
 	}
 
 	if len(strings.TrimSpace(parentPath)) == 0 {

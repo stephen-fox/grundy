@@ -81,14 +81,9 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	serviceConfig := &service.Config{
-		Name:        name,
-		DisplayName: name,
-		Description: description,
-		Arguments:   []string{
-			"-" + appSettingsDirPathArg,
-			*appSettingsDirPath,
-		},
+	serviceConfig, err := serviceConfig()
+	if err != nil {
+		log.Fatal(err.Error())
 	}
 
 	r := &runner{
