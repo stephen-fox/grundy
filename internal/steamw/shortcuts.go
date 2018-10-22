@@ -106,7 +106,12 @@ func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 		options = config.Launcher.DefaultArgs() + " " + config.Game.AdditionalLauncherArgs()
 	}
 
-	options = options + " " + config.Game.ExePath(true)
+	exePath, exists := config.Game.ExePath()
+	if !exists {
+		return false, errors.New("The game executable does not exist")
+	}
+
+	options = options + " " + exePath
 
 	var updated bool
 

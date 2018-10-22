@@ -1,9 +1,12 @@
 package settings
 
 import (
+	"errors"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -26,6 +29,7 @@ const (
 
 	gameName           key = "name"
 	gameExePath        key = "exe_path"
+	gameAutoMatchExe   key = "auto_match_exe"
 	gameLauncher       key = "launcher"
 	gameOverrideArgs   key = "override_args"
 	gameAdditionalArgs key = "additional_args"
@@ -215,7 +219,7 @@ type GameSettings interface {
 	SetName(string)
 	Name() string
 	SetExePath(string)
-	ExePath(relativeToSettings bool) string
+	ExePath() (filePath string, exists bool)
 	SetLauncher(string)
 	Launcher() string
 	ShouldOverrideLauncherArgs() bool
@@ -249,6 +253,7 @@ func (o *defaultGameSettings) ResetToDefaults() {
 
 	o.config.AddOrUpdateKeyValue(none, gameName, "example-game")
 	o.config.AddOrUpdateKeyValue(none, gameExePath, "example.exe")
+	o.config.AddOrUpdateKeyValue(none, gameAutoMatchExe, ".exe")
 	o.config.AddOrUpdateKeyValue(none, gameLauncher, "example-launcher")
 	o.config.AddOrUpdateKeyValue(none, gameAdditionalArgs, "")
 	o.config.AddOrUpdateKeyValue(none, gameOverrideArgs, "")
@@ -276,14 +281,47 @@ func (o *defaultGameSettings) SetExePath(p string) {
 	o.config.AddOrUpdateKeyValue(none, gameExePath, appendDoubleQuotesIfNeeded(p))
 }
 
-func (o *defaultGameSettings) ExePath(relativeToSettings bool) string {
+func (o *defaultGameSettings) ExePath() (string, bool) {
 	exePath := o.config.KeyValue(none, gameExePath)
+	exeAutoMatch := o.config.KeyValue(none, gameAutoMatchExe)
 
-	if relativeToSettings {
-		exePath = path.Join(path.Dir(o.filePath), exePath)
+	if len(strings.TrimSpace(exePath)) == 0 && len(strings.TrimSpace(exeAutoMatch)) == 0 {
+		return "", false
 	}
 
-	return appendDoubleQuotesIfNeeded(exePath)
+	configDirPath := filepath.Dir(o.filePath)
+
+	if len(strings.TrimSpace(exeAutoMatch)) > 0 {
+		infos, err := ioutil.ReadDir(configDirPath)
+		if err == nil {
+			for _, in := range infos {
+				if strings.Contains(in.Name(), exeAutoMatch) {
+					result := filepath.Join(configDirPath, in.Name())
+
+					return appendDoubleQuotesIfNeeded(result), true
+				}
+			}
+		}
+	}
+
+	if len(strings.TrimSpace(exePath)) == 0 {
+		return "", false
+	}
+
+	if strings.Contains(exePath, ":") || strings.HasPrefix(exePath, "/") {
+		// The path is absolute.
+		exePath = filepath.Clean(exePath)
+	} else {
+		// This path is relative.
+		exePath = filepath.Join(configDirPath, exePath)
+	}
+
+	_, err := os.Stat(exePath)
+	if err != nil {
+		return "", false
+	}
+
+	return appendDoubleQuotesIfNeeded(exePath), true
 }
 
 func (o *defaultGameSettings) SetLauncher(name string) {
@@ -363,6 +401,7 @@ func (o *defaultGameSettings) Categories() []string {
 
 type KnownGamesSettings interface {
 	SaveableSettings
+	ConfigFilePathsToGameNames() map[string]string
 	AddUniqueGameOnly(game GameSettings, configFilePath string) bool
 	Remove(configFilePath string) (gameName string, ok bool)
 	RemoveNonExistingConfigs() (filePathsToGameNames map[string]string)
@@ -398,6 +437,13 @@ func (o *defaultKnownGamesSettings) Save(w io.Writer) error {
 	o.config.SetSectionComment(none, managedFileComment)
 
 	return o.config.Save(w)
+}
+
+func (o *defaultKnownGamesSettings) ConfigFilePathsToGameNames() map[string]string {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	return o.config.SectionKeyAndValues(none)
 }
 
 func (o *defaultKnownGamesSettings) AddUniqueGameOnly(game GameSettings, filePath string) bool {
@@ -583,10 +629,17 @@ func LoadGameSettings(filePath string) (GameSettings, error) {
 		return &defaultGameSettings{}, err
 	}
 
-	return &defaultGameSettings{
+	d := &defaultGameSettings{
 		config:   f,
 		filePath: filePath,
-	}, nil
+	}
+
+	_, exeExists := d.ExePath()
+	if !exeExists {
+		return &defaultGameSettings{}, errors.New("The game's executable path does not exist")
+	}
+
+	return d, nil
 }
 
 func Create(parentDirPath string, filenameSuffix string, s SaveableSettings) error {
