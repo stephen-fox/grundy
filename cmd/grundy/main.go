@@ -55,6 +55,7 @@ func (o *runner) Start(s service.Service) error {
 }
 
 func (o *runner) Stop(s service.Service) error {
+	log.Println("Stopping...")
 	o.stop <- struct{}{}
 	return nil
 }
@@ -119,6 +120,8 @@ func main() {
 				log.Println("Daemon status could not be determined")
 			}
 		} else {
+			log.Println("Executing command '" + *daemonCommand + "'...")
+
 			err = service.Control(s, *daemonCommand)
 			if err != nil {
 				log.Fatal(err.Error())
