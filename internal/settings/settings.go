@@ -292,17 +292,17 @@ func (o *defaultGameSettings) Name() string {
 }
 
 func (o *defaultGameSettings) SetExePath(p string) {
-	o.config.AddOrUpdateKeyValue(none, gameExePath, p)
+	o.config.AddOrUpdateKeyValue(none, gameExePath, appendDoubleQuotesIfNeeded(p))
 }
 
 func (o *defaultGameSettings) ExePath(relativeToSettings bool) string {
 	exePath := o.config.KeyValue(none, gameExePath)
 
 	if relativeToSettings {
-		return path.Join(path.Dir(o.filePath), exePath)
+		exePath = path.Join(path.Dir(o.filePath), exePath)
 	}
 
-	return exePath
+	return appendDoubleQuotesIfNeeded(exePath)
 }
 
 func (o *defaultGameSettings) SetLauncher(name string) {
@@ -628,4 +628,20 @@ func Create(parentDirPath string, filenameSuffix string, s SaveableSettings) err
 	defer f.Close()
 
 	return nil
+}
+
+func appendDoubleQuotesIfNeeded(s string) string {
+	if strings.Contains(s, " ") {
+		doubleQuote := "\""
+
+		if !strings.HasPrefix(s, doubleQuote) {
+			s = doubleQuote + s
+		}
+
+		if !strings.HasSuffix(s, doubleQuote) {
+			s = s + doubleQuote
+		}
+	}
+
+	return s
 }
