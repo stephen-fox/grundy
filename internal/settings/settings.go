@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -21,8 +20,6 @@ const (
 	none          section = ""
 	appSettings   section = "settings"
 	appWatchPaths section = "watch_paths"
-
-	appAutoStart key = "auto_start"
 
 	launcherExePath     key = "exe_path"
 	launcherDefaultArgs key = "default_args"
@@ -51,8 +48,6 @@ type SaveableSettings interface {
 
 type AppSettings interface {
 	SaveableSettings
-	IsAutoStart() bool
-	SetAutoStart(bool)
 	WatchPaths() []string
 	AddWatchPath(string)
 	RemoveWatchPath(string)
@@ -79,22 +74,8 @@ func (o *defaultAppSettings) ResetToDefaults() {
 	o.config.Clear()
 
 	o.config.AddSection(appSettings)
-	o.config.AddOrUpdateKeyValue(appSettings, appAutoStart, strconv.FormatBool(true))
 	o.config.DeleteSection(appWatchPaths)
 	o.config.AddSection(appWatchPaths)
-}
-
-func (o *defaultAppSettings) IsAutoStart() bool {
-	v, err := strconv.ParseBool(o.config.KeyValue(appSettings, appAutoStart))
-	if err != nil {
-		return false
-	}
-
-	return v
-}
-
-func (o *defaultAppSettings) SetAutoStart(v bool) {
-	o.config.AddOrUpdateKeyValue(appSettings, appAutoStart, strconv.FormatBool(v))
 }
 
 func (o *defaultAppSettings) WatchPaths() []string {
