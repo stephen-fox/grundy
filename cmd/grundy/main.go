@@ -9,12 +9,13 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/kardianos/service"
 	"github.com/stephen-fox/grundy/internal/gcw"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
-	"github.com/kardianos/service"
 )
 
 const (
@@ -35,7 +36,6 @@ type primarySettings struct {
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
 	steamShortcutsMutex *sync.Mutex
-	dirPathsToWatchers  map[string]watcher.Watcher
 }
 
 var (
@@ -195,7 +195,6 @@ func setupPrimarySettings() (*primarySettings, error) {
 		launchers:           launchers,
 		knownGames:          knownGames,
 		steamShortcutsMutex: steamShortcutsMutex,
-		dirPathsToWatchers:  make(map[string]watcher.Watcher),
 	}, nil
 }
 
@@ -242,6 +241,16 @@ func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownG
 
 func mainLoop(primary *primarySettings, stop chan struct{}) {
 	primary.watcher.Start()
+	dirPathsToWatchers  := make(map[string]watcher.Watcher)
+	updateBuffer := 5 * time.Second
+	watchersTimer := time.NewTimer(updateBuffer)
+	defer watchersTimer.Stop()
+	if !watchersTimer.Stop() {
+		select {
+		case <-watchersTimer.C:
+		default:
+		}
+	}
 
 	for {
 		select {
@@ -256,28 +265,47 @@ func mainLoop(primary *primarySettings, stop chan struct{}) {
 						log.Println("Failed to load application settings -", err.Error())
 						continue
 					}
-
-					updateGameCollectionWatchers(primary)
 				case primary.launchers.Filename(""):
 					err := primary.launchers.Reload(filePath)
 					if err != nil {
-						log.Println("Failed to load application settings -", err.Error())
+						log.Println("Failed to load launchers settings -", err.Error())
 						continue
 					}
+					// TODO: Update shortcuts when this happens.
+				default:
+					continue
 				}
+
+				if !watchersTimer.Stop() {
+					select {
+					case <-watchersTimer.C:
+					default:
+					}
+				}
+
+				watchersTimer.Reset(updateBuffer)
 			}
+		case <-watchersTimer.C:
+			updateGameCollectionWatchers(primary, dirPathsToWatchers)
 		case <-stop:
+			for k, w := range dirPathsToWatchers {
+				w.Destroy()
+
+				delete(dirPathsToWatchers, k)
+			}
 			primary.watcher.Destroy()
 			return
 		}
 	}
 }
 
-func updateGameCollectionWatchers(primary *primarySettings) {
+func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers map[string]watcher.Watcher) {
+	log.Println("Updating game collection watchers...")
+
 	watchDirs := primary.app.WatchPaths()
 
 	OUTER:
-	for dirPath, currentWatcher := range primary.dirPathsToWatchers {
+	for dirPath, currentWatcher := range dirPathsToWatchers {
 		for _, newDirPath := range watchDirs {
 			if dirPath == newDirPath {
 				continue OUTER
@@ -288,11 +316,11 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 
 		currentWatcher.Destroy()
 
-		delete(primary.dirPathsToWatchers, dirPath)
+		delete(dirPathsToWatchers, dirPath)
 	}
 
 	for _, dirPath := range watchDirs {
-		_, ok := primary.dirPathsToWatchers[dirPath]
+		_, ok := dirPathsToWatchers[dirPath]
 		if ok {
 			continue
 		}
@@ -315,6 +343,6 @@ func updateGameCollectionWatchers(primary *primarySettings) {
 
 		w.Start()
 
-		primary.dirPathsToWatchers[dirPath] = w
+		dirPathsToWatchers[dirPath] = w
 	}
 }
