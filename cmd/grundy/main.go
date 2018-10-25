@@ -36,6 +36,7 @@ type primarySettings struct {
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
 	steamShortcutsMutex *sync.Mutex
+	lock                settings.Lock
 }
 
 var (
@@ -44,19 +45,35 @@ var (
 	help               = flag.Bool(helpArg, false, "Show this help information")
 )
 
-type runner struct {
+type application struct {
 	primary *primarySettings
-	stop    chan struct{}
+	stop    chan chan struct{}
 }
 
-func (o *runner) Start(s service.Service) error {
+func (o *application) Start(s service.Service) error {
+	log.Println("Acquiring lock...")
+
+	err := o.primary.lock.Acquire()
+	if err != nil {
+		return err
+	}
+
+	log.Println("Lock acquired")
+
 	go mainLoop(o.primary, o.stop)
+
 	return nil
 }
 
-func (o *runner) Stop(s service.Service) error {
+func (o *application) Stop(s service.Service) error {
 	log.Println("Stopping...")
-	o.stop <- struct{}{}
+
+	c := make(chan struct{})
+	o.stop <- c
+	<-c
+
+	log.Println("Finished stopping resources")
+
 	return nil
 }
 
@@ -86,12 +103,12 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	r := &runner{
+	app := &application{
 		primary: primary,
-		stop:    make(chan struct{}),
+		stop:    make(chan chan struct{}),
 	}
 
-	s, err := service.New(r, serviceConfig)
+	s, err := service.New(app, serviceConfig)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -195,6 +212,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 		launchers:           launchers,
 		knownGames:          knownGames,
 		steamShortcutsMutex: steamShortcutsMutex,
+		lock:                settings.NewLock(internalDirPath),
 	}, nil
 }
 
@@ -239,7 +257,7 @@ func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownG
 	return nil
 }
 
-func mainLoop(primary *primarySettings, stop chan struct{}) {
+func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 	primary.watcher.Start()
 	dirPathsToWatchers  := make(map[string]watcher.Watcher)
 	updateBuffer := 5 * time.Second
@@ -277,13 +295,21 @@ func mainLoop(primary *primarySettings, stop chan struct{}) {
 			}
 		case <-watchersTimer.C:
 			updateGameCollectionWatchers(primary, dirPathsToWatchers)
-		case <-stop:
+		case err := <-primary.lock.Errs():
+			log.Println("Error maintaining lock file - " + err.Error())
+		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
 
 				delete(dirPathsToWatchers, k)
 			}
+
 			primary.watcher.Destroy()
+
+			primary.lock.Release()
+
+			c <- struct{}{}
+
 			return
 		}
 	}
