@@ -25,7 +25,7 @@ type defaultLock struct {
 	mutex         *sync.Mutex
 	parentDirPath string
 	errs          chan error
-	stop          chan struct{}
+	stop          chan chan struct{}
 }
 
 func (o *defaultLock) Acquire() error {
@@ -35,7 +35,7 @@ func (o *defaultLock) Acquire() error {
 	select {
 	case _, open := <-o.stop:
 		if !open {
-			o.stop = make(chan struct{})
+			o.stop = make(chan chan struct{})
 		}
 	default:
 		return nil
@@ -67,6 +67,10 @@ func (o *defaultLock) Release() {
 	default:
 	}
 
+	c := make(chan struct{})
+	o.stop <- c
+	<-c
+
 	close(o.stop)
 }
 
@@ -83,7 +87,8 @@ func (o *defaultLock) updateLock(filePath string) {
 			if err != nil {
 				o.errs <- err
 			}
-		case <-o.stop:
+		case c := <-o.stop:
+			c <- struct{}{}
 			return
 		}
 	}
@@ -94,7 +99,7 @@ func NewLock(internalSettingsDirPath string) Lock {
 		mutex:         &sync.Mutex{},
 		parentDirPath: internalSettingsDirPath,
 		errs:          make(chan error),
-		stop:          make(chan struct{}),
+		stop:          make(chan chan struct{}),
 	}
 
 	close(l.stop)

@@ -51,15 +51,6 @@ type application struct {
 }
 
 func (o *application) Start(s service.Service) error {
-	log.Println("Acquiring lock...")
-
-	err := o.primary.lock.Acquire()
-	if err != nil {
-		return err
-	}
-
-	log.Println("Lock acquired")
-
 	go mainLoop(o.primary, o.stop)
 
 	return nil
@@ -143,10 +134,21 @@ func main() {
 		os.Exit(0)
 	}
 
+	log.Println("Acquiring lock...")
+
+	err = primary.lock.Acquire()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	log.Println("Lock acquired")
+
 	err = s.Run()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+
+	primary.lock.Release()
 }
 
 func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
@@ -305,8 +307,6 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			}
 
 			primary.watcher.Destroy()
-
-			primary.lock.Release()
 
 			c <- struct{}{}
 
