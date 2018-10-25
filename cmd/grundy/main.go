@@ -110,30 +110,9 @@ func main() {
 	}
 
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
-		*daemonCommand = strings.ToLower(*daemonCommand)
-		if *daemonCommand == "status" {
-			status, err := s.Status()
-			if err != nil {
-				log.Fatal(err.Error())
-			}
-
-			switch status {
-			case service.StatusRunning:
-				log.Println(daemonStatusPrefix + "running")
-			case service.StatusStopped:
-				log.Println(daemonStatusPrefix + "stopped")
-			case service.StatusUnknown:
-				log.Println(daemonStatusPrefix + "unknown")
-			default:
-				log.Println("Daemon status could not be determined")
-			}
-		} else {
-			log.Println("Executing '" + *daemonCommand + "' daemon control command...")
-
-			err = service.Control(s, *daemonCommand)
-			if err != nil {
-				log.Fatal(err.Error())
-			}
+		err := executeDaemonCommand(s, *daemonCommand)
+		if err != nil {
+			log.Fatal(err.Error())
 		}
 
 		os.Exit(0)
@@ -260,6 +239,37 @@ func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownG
 
 	for id, err := range result.IdsToFailures {
 		log.Println("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
+	}
+
+	return nil
+}
+
+func executeDaemonCommand(s service.Service, command string) error {
+	command = strings.ToLower(command)
+
+	if command == "status" {
+		status, err := s.Status()
+		if err != nil {
+			return err
+		}
+
+		switch status {
+		case service.StatusRunning:
+			log.Println(daemonStatusPrefix + "running")
+		case service.StatusStopped:
+			log.Println(daemonStatusPrefix + "stopped")
+		case service.StatusUnknown:
+			log.Println(daemonStatusPrefix + "unknown")
+		default:
+			log.Println("Daemon status could not be determined")
+		}
+	} else {
+		log.Println("Executing '" + command + "' daemon control command...")
+
+		err := service.Control(s, command)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
