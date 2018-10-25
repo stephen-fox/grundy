@@ -31,6 +31,7 @@ const (
 )
 
 type primarySettings struct {
+	dirPath             string
 	watcher             watcher.Watcher
 	watcherConfig       watcher.Config
 	app                 settings.AppSettings
@@ -39,12 +40,6 @@ type primarySettings struct {
 	steamShortcutsMutex *sync.Mutex
 	lock                settings.Lock
 }
-
-var (
-	daemonCommand      = flag.String(daemonCommandArg, "", "Manage the application's daemon")
-	appSettingsDirPath = flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
-	help               = flag.Bool(helpArg, false, "Show this help information")
-)
 
 type application struct {
 	primary *primarySettings
@@ -70,6 +65,11 @@ func (o *application) Stop(s service.Service) error {
 }
 
 func main() {
+	appSettingsDirPath := flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
+	daemonCommand := flag.String(daemonCommandArg, "", "Manage the application's daemon with the following commands:\n" +
+		"'status', 'start', 'stop', 'install', 'uninstall'")
+	help := flag.Bool(helpArg, false, "Show this help information")
+
 	flag.Parse()
 
 	if *help {
@@ -209,6 +209,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	}
 
 	return &primarySettings{
+		dirPath:             settingsDirPath,
 		watcherConfig:       primarySettingsWatcherConfig,
 		watcher:             primarySettingsWatcher,
 		app:                 app,
@@ -352,7 +353,7 @@ func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers m
 		}
 
 		collectionWatcherConfig := &gcw.WatcherConfig{
-			AppSettingsDirPath:  *appSettingsDirPath,
+			AppSettingsDirPath:  primary.dirPath,
 			DirPath:             dirPath,
 			Launchers:           primary.launchers,
 			KnownGames:          primary.knownGames,
