@@ -244,13 +244,8 @@ func mainLoop(primary *primarySettings, stop chan struct{}) {
 	dirPathsToWatchers  := make(map[string]watcher.Watcher)
 	updateBuffer := 5 * time.Second
 	watchersTimer := time.NewTimer(updateBuffer)
+	stopTimerSafely(watchersTimer)
 	defer watchersTimer.Stop()
-	if !watchersTimer.Stop() {
-		select {
-		case <-watchersTimer.C:
-		default:
-		}
-	}
 
 	for {
 		select {
@@ -276,12 +271,7 @@ func mainLoop(primary *primarySettings, stop chan struct{}) {
 					continue
 				}
 
-				if !watchersTimer.Stop() {
-					select {
-					case <-watchersTimer.C:
-					default:
-					}
-				}
+				stopTimerSafely(watchersTimer)
 
 				watchersTimer.Reset(updateBuffer)
 			}
@@ -295,6 +285,15 @@ func mainLoop(primary *primarySettings, stop chan struct{}) {
 			}
 			primary.watcher.Destroy()
 			return
+		}
+	}
+}
+
+func stopTimerSafely(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
 		}
 	}
 }
