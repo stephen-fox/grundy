@@ -76,7 +76,7 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
-	primary, err := setupPrimarySettings()
+	primary, err := setupPrimarySettings(*appSettingsDirPath)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -132,7 +132,7 @@ func main() {
 	}
 }
 
-func setupPrimarySettings() (*primarySettings, error) {
+func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	launchers := settings.NewLaunchersSettings()
 	launchers.AddOrUpdate(settings.NewLauncher())
 	app := settings.NewAppSettings()
@@ -145,15 +145,15 @@ func setupPrimarySettings() (*primarySettings, error) {
 	}
 
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
-		err := settings.Create(*appSettingsDirPath + "/examples", settings.ExampleSuffix, s)
+		err := settings.Create(settingsDirPath + "/examples", settings.ExampleSuffix, s)
 		if err != nil {
-			return &primarySettings{}, errors.New("Failed to create example application settings files - " + err.Error())
+			return &primarySettings{}, errors.New("Failed to create example application settings file - " + err.Error())
 		}
 
 		if createInMainDir {
-			_, statErr := os.Stat(path.Join(*appSettingsDirPath, s.Filename("")))
+			_, statErr := os.Stat(path.Join(settingsDirPath, s.Filename("")))
 			if statErr != nil {
-				err := settings.Create(*appSettingsDirPath, "", s)
+				err := settings.Create(settingsDirPath, "", s)
 				if err != nil {
 					return &primarySettings{}, err
 				}
@@ -161,7 +161,7 @@ func setupPrimarySettings() (*primarySettings, error) {
 		}
 	}
 
-	internalDirPath, err := settings.CreateInternalFilesDir(*appSettingsDirPath)
+	internalDirPath, err := settings.CreateInternalFilesDir(settingsDirPath)
 	if err != nil {
 		return &primarySettings{}, errors.New("Failed to create internal settings directory path - " + err.Error())
 	}
@@ -178,7 +178,7 @@ func setupPrimarySettings() (*primarySettings, error) {
 
 	primarySettingsWatcherConfig := watcher.Config{
 		ScanFunc:    watcher.ScanFilesInDirectory,
-		RootDirPath: *appSettingsDirPath,
+		RootDirPath: settingsDirPath,
 		FileSuffix:  settings.FileExtension,
 		Changes:     make(chan watcher.Changes),
 	}
