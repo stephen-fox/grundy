@@ -25,6 +25,8 @@ const (
 		"so you do not have to! Please refer to the usage documentation " +
 		"at https://github.com/stephen-fox/grundy for more information."
 
+	daemonStatusPrefix = "Daemon status - "
+
 	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
 	helpArg               = "h"
@@ -47,6 +49,8 @@ type application struct {
 }
 
 func (o *application) Start(s service.Service) error {
+	log.Println("Starting...")
+
 	go mainLoop(o.primary, o.stop)
 
 	return nil
@@ -115,16 +119,16 @@ func main() {
 
 			switch status {
 			case service.StatusRunning:
-				log.Println("Daemon status - running")
+				log.Println(daemonStatusPrefix + "running")
 			case service.StatusStopped:
-				log.Println("Daemon status - stopped")
+				log.Println(daemonStatusPrefix + "stopped")
 			case service.StatusUnknown:
-				log.Println("Daemon status - unknown")
+				log.Println(daemonStatusPrefix + "unknown")
 			default:
 				log.Println("Daemon status could not be determined")
 			}
 		} else {
-			log.Println("Executing command '" + *daemonCommand + "'...")
+			log.Println("Executing '" + *daemonCommand + "' daemon control command...")
 
 			err = service.Control(s, *daemonCommand)
 			if err != nil {
