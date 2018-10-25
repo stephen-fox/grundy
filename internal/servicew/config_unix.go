@@ -1,6 +1,6 @@
 // +build !windows
 
-package main
+package servicew
 
 import (
 	"os/user"
@@ -8,7 +8,7 @@ import (
 	"github.com/kardianos/service"
 )
 
-func serviceConfig() (*service.Config, error) {
+func Config(name string, description string) (*service.Config, error) {
 	u, err := user.Current()
 	if err != nil {
 		return &service.Config{}, err

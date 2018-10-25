@@ -13,6 +13,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/stephen-fox/grundy/internal/gcw"
+	"github.com/stephen-fox/grundy/internal/servicew"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
 	"github.com/stephen-fox/watcher"
@@ -89,7 +90,7 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	serviceConfig, err := serviceConfig()
+	serviceConfig, err := servicew.Config(name, description)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

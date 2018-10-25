@@ -1,10 +1,10 @@
-package main
+package servicew
 
 import (
 	"github.com/kardianos/service"
 )
 
-func serviceConfig() (*service.Config, error) {
+func Config(name string, description string) (*service.Config, error) {
 	return &service.Config{
 		Name:        name,
 		DisplayName: name,
