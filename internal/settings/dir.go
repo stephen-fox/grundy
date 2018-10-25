@@ -2,9 +2,9 @@ package settings
 
 import (
 	"os"
-	"strings"
 	"path"
 	"runtime"
+	"strings"
 )
 
 const (
@@ -37,7 +37,7 @@ func DirPath() string {
 }
 
 func CreateInternalFilesDir(settingsDirPath string) (string, error) {
-	dirPath := path.Join(settingsDirPath, internalDirName)
+	dirPath := InternalFilesDir(settingsDirPath)
 
 	err := CreateDir(dirPath)
 	if err != nil {
@@ -45,6 +45,10 @@ func CreateInternalFilesDir(settingsDirPath string) (string, error) {
 	}
 
 	return dirPath, nil
+}
+
+func InternalFilesDir(settingsDirPath string) string {
+	return path.Join(settingsDirPath, internalDirName)
 }
 
 func CreateLogFilesDir(settingsDirPath string) (string, error) {
