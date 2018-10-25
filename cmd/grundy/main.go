@@ -32,17 +32,6 @@ const (
 	helpArg               = "h"
 )
 
-type primarySettings struct {
-	dirPath             string
-	watcher             watcher.Watcher
-	watcherConfig       watcher.Config
-	app                 settings.AppSettings
-	launchers           settings.LaunchersSettings
-	knownGames          settings.KnownGamesSettings
-	steamShortcutsMutex *sync.Mutex
-	lock                settings.Lock
-}
-
 type application struct {
 	primary *primarySettings
 	stop    chan chan struct{}
@@ -66,6 +55,17 @@ func (o *application) Stop(s service.Service) error {
 	log.Println("Finished stopping resources")
 
 	return nil
+}
+
+type primarySettings struct {
+	dirPath             string
+	watcher             watcher.Watcher
+	watcherConfig       watcher.Config
+	app                 settings.AppSettings
+	launchers           settings.LaunchersSettings
+	knownGames          settings.KnownGamesSettings
+	steamShortcutsMutex *sync.Mutex
+	lock                settings.Lock
 }
 
 func main() {
