@@ -13,6 +13,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/stephen-fox/grundy/internal/gcw"
+	"github.com/stephen-fox/grundy/internal/lock"
 	"github.com/stephen-fox/grundy/internal/servicew"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
@@ -65,7 +66,7 @@ type primarySettings struct {
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
 	steamShortcutsMutex *sync.Mutex
-	lock                settings.Lock
+	lock                lock.Lock
 }
 
 func main() {
@@ -118,14 +119,10 @@ func main() {
 		os.Exit(0)
 	}
 
-	log.Println("Acquiring lock...")
-
 	err = primary.lock.Acquire()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-
-	log.Println("Lock acquired")
 
 	err = s.Run()
 	if err != nil {
@@ -199,7 +196,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 		launchers:           launchers,
 		knownGames:          knownGames,
 		steamShortcutsMutex: steamShortcutsMutex,
-		lock:                settings.NewLock(internalDirPath),
+		lock:                lock.NewLock(internalDirPath),
 	}, nil
 }
 
