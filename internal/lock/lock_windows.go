@@ -31,22 +31,11 @@ func (o *windowsLock) Acquire() error {
 		return nil
 	}
 
-	timeout := acquireTimeout
-	c, dialErr := winio.DialPipe(lockUri, &timeout)
-	if dialErr == nil {
-		close(o.stop)
-		c.Close()
-		return &AcquireError{
-			reason: inUseErr,
-			inUse:  true,
-		}
-	}
-
 	listener, err := winio.ListenPipe(lockUri, &winio.PipeConfig{})
 	if err != nil {
 		close(o.stop)
 		return &AcquireError{
-			reason: unableToCreatePrefix + err.Error(),
+			reason: inUseErr,
 			inUse:  true,
 		}
 	}
