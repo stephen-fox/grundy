@@ -40,6 +40,7 @@ func (o *unixLock) Acquire() error {
 	if statErr != nil {
 		err := syscall.Mkfifo(o.path, mode)
 		if err != nil {
+			close(o.stop)
 			return &AcquireError{
 				reason:     unableToCreatePrefix + err.Error(),
 				createFail: true,
@@ -59,6 +60,11 @@ func (o *unixLock) Acquire() error {
 
 	select {
 	case err := <-readResult:
+		// Another instance of the application owns the pipe
+		// if we can read before the timeout occurs.
+
+		close(o.stop)
+
 		if err != nil {
 			return &AcquireError{
 				reason:   unableToReadPrefix + err.Error(),
