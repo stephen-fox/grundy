@@ -65,6 +65,11 @@ func (o *unixLock) Acquire() error {
 				readFail: true,
 			}
 		}
+
+		return &AcquireError{
+			reason: inUseErr,
+			inUse:  true,
+		}
 	case <-timeout.C:
 		// No one is home.
 	}
