@@ -103,7 +103,7 @@ func (o *unixLock) manage() {
 					continue
 				}
 
-				_, err = f.WriteString(strconv.Itoa(os.Getpid()))
+				_, err = f.WriteString(strconv.Itoa(os.Getpid()) + "\n")
 				if err != nil {
 					f.Close()
 					o.errs <- err
