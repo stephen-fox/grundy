@@ -82,14 +82,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	logFile, err := settings.LogFile(*appSettingsDirPath)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer logFile.Close()
-
-	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
-
 	primary, err := setupPrimarySettings(*appSettingsDirPath)
 	if err != nil {
 		log.Fatal(err.Error())
@@ -123,13 +115,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	defer primary.lock.Release()
+
+	logFile, err := settings.LogFile(*appSettingsDirPath)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer logFile.Close()
+
+	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
 	err = s.Run()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-
-	primary.lock.Release()
 }
 
 func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
