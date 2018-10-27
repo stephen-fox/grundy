@@ -359,7 +359,7 @@ func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers m
 
 	watchDirs := primary.app.WatchPaths()
 
-	OUTER:
+OUTER:
 	for dirPath, currentWatcher := range dirPathsToWatchers {
 		for _, newDirPath := range watchDirs {
 			if dirPath == newDirPath {
