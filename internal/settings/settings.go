@@ -634,9 +634,13 @@ func LoadGameSettings(filePath string) (GameSettings, error) {
 		filePath: filePath,
 	}
 
+	if len(strings.TrimSpace(d.Name())) == 0 {
+		return &defaultGameSettings{}, errors.New("The game config's name field is empty")
+	}
+
 	_, exeExists := d.ExePath()
 	if !exeExists {
-		return &defaultGameSettings{}, errors.New("The game's executable path does not exist")
+		return &defaultGameSettings{}, errors.New("The game config's executable path does not exist")
 	}
 
 	return d, nil
