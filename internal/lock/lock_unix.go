@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	mode = 0644
+	dirMode  = 0755
+	pipeMode = 0644
 )
 
 type unixLock struct {
 	Lock
-	mutex *sync.Mutex
-	errs  chan error
-	stop  chan chan struct{}
-	path  string
+	mutex         *sync.Mutex
+	errs          chan error
+	stop          chan chan struct{}
+	parentDirPath string
+	pipePath      string
 }
 
 func (o *unixLock) Acquire() error {
@@ -36,9 +38,14 @@ func (o *unixLock) Acquire() error {
 		return nil
 	}
 
-	_, statErr := os.Stat(o.path)
+	err := os.MkdirAll(o.parentDirPath, dirMode)
+	if err != nil {
+		return err
+	}
+
+	_, statErr := os.Stat(o.pipePath)
 	if statErr != nil {
-		err := syscall.Mkfifo(o.path, mode)
+		err := syscall.Mkfifo(o.pipePath, pipeMode)
 		if err != nil {
 			close(o.stop)
 			return &AcquireError{
@@ -51,7 +58,7 @@ func (o *unixLock) Acquire() error {
 	readResult := make(chan error)
 
 	go func() {
-		f, err := os.Open(o.path)
+		f, err := os.Open(o.pipePath)
 		readResult <- err
 		f.Close()
 	}()
@@ -90,7 +97,7 @@ func (o *unixLock) manage() {
 
 	go func() {
 		for {
-			f, err := os.OpenFile(o.path, os.O_WRONLY, mode)
+			f, err := os.OpenFile(o.pipePath, os.O_WRONLY, pipeMode)
 			select {
 			case _, open := <-done:
 				if !open {
@@ -117,7 +124,7 @@ func (o *unixLock) manage() {
 
 	c := <-o.stop
 	close(done)
-	os.Remove(o.path)
+	os.Remove(o.pipePath)
 	c <- struct{}{}
 }
 
@@ -146,10 +153,11 @@ func (o *unixLock) Release() {
 
 func NewLock(parentDirPath string) Lock {
 	l := &unixLock{
-		path:  path.Join(parentDirPath, name),
-		mutex: &sync.Mutex{},
-		errs:  make(chan error),
-		stop:  make(chan chan struct{}),
+		parentDirPath: parentDirPath,
+		pipePath:      path.Join(parentDirPath, name),
+		mutex:         &sync.Mutex{},
+		errs:          make(chan error),
+		stop:          make(chan chan struct{}),
 	}
 
 	close(l.stop)
