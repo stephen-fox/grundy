@@ -58,6 +58,16 @@ func (o *application) Stop(s service.Service) error {
 	return nil
 }
 
+type dummyService struct {}
+
+func (o *dummyService) Start(s service.Service) error {
+	return nil
+}
+
+func (o *dummyService) Stop(s service.Service) error {
+	return nil
+}
+
 type primarySettings struct {
 	dirPath             string
 	watcher             watcher.Watcher
@@ -66,7 +76,6 @@ type primarySettings struct {
 	launchers           settings.LaunchersSettings
 	knownGames          settings.KnownGamesSettings
 	steamShortcutsMutex *sync.Mutex
-	lock                lock.Lock
 }
 
 func main() {
@@ -82,12 +91,42 @@ func main() {
 		os.Exit(0)
 	}
 
-	primary, err := setupPrimarySettings(*appSettingsDirPath)
+	serviceConfig, err := servicew.Config(name, description)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	serviceConfig, err := servicew.Config(name, description)
+	if len(strings.TrimSpace(*daemonCommand)) > 0 {
+		err := executeDaemonCommand(serviceConfig, *daemonCommand)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		os.Exit(0)
+	}
+
+	instanceLock := lock.NewLock(settings.InternalFilesDir(*appSettingsDirPath))
+	err = instanceLock.Acquire()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer instanceLock.Release()
+
+	go func() {
+		for err := range instanceLock.Errs() {
+			log.Println("Error maintaining instance lock - " + err.Error())
+		}
+	}()
+
+	logFile, err := settings.LogFile(*appSettingsDirPath)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	defer logFile.Close()
+
+	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
+
+	primary, err := setupPrimarySettings(*appSettingsDirPath)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -101,29 +140,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-
-	if len(strings.TrimSpace(*daemonCommand)) > 0 {
-		err := executeDaemonCommand(s, *daemonCommand)
-		if err != nil {
-			log.Fatal(err.Error())
-		}
-
-		os.Exit(0)
-	}
-
-	err = primary.lock.Acquire()
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer primary.lock.Release()
-
-	logFile, err := settings.LogFile(*appSettingsDirPath)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer logFile.Close()
-
-	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
 	err = s.Run()
 	if err != nil {
@@ -195,7 +211,6 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 		launchers:           launchers,
 		knownGames:          knownGames,
 		steamShortcutsMutex: steamShortcutsMutex,
-		lock:                lock.NewLock(internalDirPath),
 	}, nil
 }
 
@@ -240,7 +255,12 @@ func cleanupKnownGameShortcuts(fileMutex *sync.Mutex, knownGames settings.KnownG
 	return nil
 }
 
-func executeDaemonCommand(s service.Service, command string) error {
+func executeDaemonCommand(serviceConfig *service.Config, command string) error {
+	s, err := service.New(&dummyService{}, serviceConfig)
+	if err != nil {
+		return err
+	}
+
 	command = strings.ToLower(command)
 
 	if command == "status" {
@@ -309,8 +329,6 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			}
 		case <-watchersTimer.C:
 			updateGameCollectionWatchers(primary, dirPathsToWatchers)
-		case err := <-primary.lock.Errs():
-			log.Println("Error maintaining lock file - " + err.Error())
 		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
