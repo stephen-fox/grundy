@@ -3,6 +3,7 @@
 package lock
 
 import (
+	"bufio"
 	"os"
 	"path"
 	"strconv"
@@ -47,7 +48,13 @@ func (o *unixLock) Acquire() error {
 	}
 
 	_, statErr := os.Stat(o.pipePath)
-	if statErr != nil {
+	if statErr == nil {
+		err := acquirePipe(o.pipePath)
+		if err != nil {
+			close(o.stop)
+			return err
+		}
+	} else {
 		err := syscall.Mkfifo(o.pipePath, pipeMode)
 		if err != nil {
 			close(o.stop)
@@ -56,38 +63,6 @@ func (o *unixLock) Acquire() error {
 				createFail: true,
 			}
 		}
-	}
-
-	readResult := make(chan error)
-
-	go func() {
-		f, err := os.Open(o.pipePath)
-		readResult <- err
-		f.Close()
-	}()
-
-	timeout := time.NewTimer(acquireTimeout)
-
-	select {
-	case err := <-readResult:
-		// Another instance of the application owns the pipe
-		// if we can read before the timeout occurs.
-
-		close(o.stop)
-
-		if err != nil {
-			return &AcquireError{
-				reason:   unableToReadPrefix + err.Error(),
-				readFail: true,
-			}
-		}
-
-		return &AcquireError{
-			reason: inUseErr,
-			inUse:  true,
-		}
-	case <-timeout.C:
-		// No one is home.
 	}
 
 	go o.manage()
@@ -152,6 +127,54 @@ func (o *unixLock) Release() {
 	<-c
 
 	close(o.stop)
+}
+
+func acquirePipe(pipePath string) error {
+	openResult := make(chan error)
+	defer close(openResult)
+
+	go func() {
+		f, err := os.Open(pipePath)
+		if err == nil {
+			// Drain the pipe to prevent "broken pipe" errors
+			// on the writer's end.
+			scanner := bufio.NewScanner(f)
+			scanner.Scan()
+		}
+		f.Close()
+
+		select {
+		case _, open := <-openResult:
+			if !open {
+				return
+			}
+		default:
+			openResult <- err
+		}
+	}()
+
+	timeout := time.NewTimer(acquireTimeout)
+
+	select {
+	case err := <-openResult:
+		// Another instance of the application owns the pipe
+		// if we can read before the timeout occurs.
+		if err != nil {
+			return &AcquireError{
+				reason:   unableToReadPrefix + err.Error(),
+				readFail: true,
+			}
+		}
+
+		return &AcquireError{
+			reason: inUseErr,
+			inUse:  true,
+		}
+	case <-timeout.C:
+		// No one is home.
+	}
+
+	return nil
 }
 
 func NewLock(parentDirPath string) Lock {
