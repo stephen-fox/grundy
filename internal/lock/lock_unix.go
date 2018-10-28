@@ -40,7 +40,10 @@ func (o *unixLock) Acquire() error {
 
 	err := os.MkdirAll(o.parentDirPath, dirMode)
 	if err != nil {
-		return err
+		return &AcquireError{
+			reason:  err.Error(),
+			dirFail: true,
+		}
 	}
 
 	_, statErr := os.Stat(o.pipePath)
