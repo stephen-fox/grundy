@@ -5,6 +5,7 @@ type AcquireError struct {
 	createFail bool
 	readFail   bool
 	inUse      bool
+	dirFail    bool
 }
 
 func (o *AcquireError) Error() string {
@@ -23,3 +24,6 @@ func (o *AcquireError) AnotherInstanceOwnsLock() bool {
 	return o.inUse
 }
 
+func (o *AcquireError) FailedToCreateParentDirectory() bool {
+	return o.dirFail
+}
