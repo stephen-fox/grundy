@@ -49,15 +49,16 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 	for steamUserId := range config.Info.IdsToDirPaths {
 		shortcutsPath := locations.ShortcutsFilePath(config.Info.DataLocations.RootDirPath(), steamUserId)
 
-		wasUpdated, err := CreateOrUpdateShortcut(config, shortcutsPath)
+		fileUpdateResult, err := CreateOrUpdateShortcut(config, shortcutsPath)
 		if err != nil {
 			result.IdsToFailures[steamUserId] = err
 			continue
 		}
 
-		if wasUpdated {
+		switch fileUpdateResult {
+		case shortcuts.UpdatedEntry:
 			result.UpdatedForIds = append(result.UpdatedForIds, steamUserId)
-		} else {
+		default:
 			result.CreatedForIds = append(result.CreatedForIds, steamUserId)
 		}
 	}
@@ -65,33 +66,7 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 	return result
 }
 
-func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (bool, error) {
-	var fileAlreadyExists bool
-	_, statErr := os.Stat(shortcutsFilePath)
-	if statErr == nil {
-		fileAlreadyExists = true
-	}
-
-	f, err := os.OpenFile(shortcutsFilePath, os.O_RDWR|os.O_CREATE, defaultShortcutsFileMode)
-	if err != nil {
-		return false, errors.New("Failed to open Steam shortcuts file - " + err.Error())
-	}
-	defer f.Close()
-
-	var scs []shortcuts.Shortcut
-
-	if fileAlreadyExists {
-		scs, err = shortcuts.Shortcuts(f)
-		if err != nil {
-			return false, err
-		}
-
-		_, err = f.Seek(0, 0)
-		if err != nil {
-			return false, err
-		}
-	}
-
+func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
 	var options string
 
 	if config.Game.ShouldOverrideLauncherArgs() {
@@ -102,29 +77,21 @@ func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 
 	exePath, exists := config.Game.ExePath()
 	if !exists {
-		return false, errors.New("The game executable does not exist")
+		return shortcuts.Unchanged, errors.New("The game executable does not exist")
 	}
 
 	options = options + " " + exePath
 
-	var updated bool
-
-	for i := range scs {
-		if scs[i].AppName == config.Game.Name() {
-			scs[i].StartDir = config.Launcher.ExeDirPath()
-			scs[i].ExePath = config.Launcher.ExePath()
-			scs[i].LaunchOptions = options
-			scs[i].IconPath = config.Game.IconPath()
-			scs[i].Tags = config.Game.Categories()
-
-			updated = true
-			break
-		}
+	onMatch := func(name string, matched *shortcuts.Shortcut) {
+		matched.StartDir = config.Launcher.ExeDirPath()
+		matched.ExePath = config.Launcher.ExePath()
+		matched.LaunchOptions = options
+		matched.IconPath = config.Game.IconPath()
+		matched.Tags = config.Game.Categories()
 	}
 
-	if !updated {
-		s := shortcuts.Shortcut{
-			Id:            len(scs),
+	noMatch := func(name string) shortcuts.Shortcut {
+		return shortcuts.Shortcut{
 			AppName:       config.Game.Name(),
 			ExePath:       config.Launcher.ExePath(),
 			StartDir:      config.Launcher.ExeDirPath(),
@@ -132,16 +99,22 @@ func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 			LaunchOptions: options,
 			Tags:          config.Game.Categories(),
 		}
-
-		scs = append(scs, s)
 	}
 
-	err = shortcuts.WriteVdfV1(scs, f)
+	createOrUpdateConfig := shortcuts.CreateOrUpdateConfig{
+		MatchName: config.Game.Name(),
+		Path:      shortcutsFilePath,
+		Mode:      defaultShortcutsFileMode,
+		OnMatch:   onMatch,
+		NoMatch:   noMatch,
+	}
+
+	result, err := shortcuts.CreateOrUpdateVdfV1File(createOrUpdateConfig)
 	if err != nil {
-		return false, err
+		return result, err
 	}
 
-	return updated, nil
+	return result, nil
 }
 
 func DeleteShortcutPerId(config DeleteShortcutConfig) DeletedShortcutsForSteamIdsResult {
@@ -179,7 +152,7 @@ func DeleteShortcuts(config DeleteShortcutConfig, shortcutsFilePath string) (Del
 	}
 	defer f.Close()
 
-	scs, err := shortcuts.Shortcuts(f)
+	scs, err := shortcuts.ReadVdfV1(f)
 	if err != nil {
 		return DeletedShortcutResult{}, err
 	}
