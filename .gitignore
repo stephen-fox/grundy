@@ -5,5 +5,9 @@
 *.iml
 .idea/
 
+# Gradle.
+.gradle/
+build/
+
 # Binaries.
 *.exe

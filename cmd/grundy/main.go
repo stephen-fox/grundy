@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -30,6 +31,10 @@ const (
 	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
 	helpArg               = "h"
+)
+
+var (
+	version string
 )
 
 type application struct {
@@ -85,6 +90,7 @@ func main() {
 	flag.Parse()
 
 	if *help {
+		fmt.Println(name, version)
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
