@@ -443,7 +443,7 @@ func (o *defaultKnownGamesSettings) ConfigFilePathsToGameNames() map[string]stri
 	o.mutex.Lock()
 	defer o.mutex.Unlock()
 
-	return o.config.SectionKeyAndValues(none)
+	return o.config.SectionKeysToValues(none)
 }
 
 func (o *defaultKnownGamesSettings) AddUniqueGameOnly(game GameSettings, filePath string) bool {

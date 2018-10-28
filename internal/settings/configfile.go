@@ -12,7 +12,7 @@ type configFile interface {
 	HasKey(section, key) bool
 	SectionKeys(section) []string
 	SectionValues(section) []string
-	SectionKeyAndValues(section) map[string]string
+	SectionKeysToValues(section) map[string]string
 	KeyValue(section, key) string
 	AddSection(section)
 	SetSectionComment(section, string)
