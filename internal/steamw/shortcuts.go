@@ -3,7 +3,6 @@ package steamw
 import (
 	"errors"
 	"os"
-	"sync"
 
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/steamutil/locations"
@@ -15,16 +14,14 @@ const (
 )
 
 type NewShortcutConfig struct {
-	Game       settings.GameSettings
-	Launcher   settings.Launcher
-	Info       DataInfo
-	FileAccess *sync.Mutex
+	Game     settings.GameSettings
+	Launcher settings.Launcher
+	Info     DataInfo
 }
 
 type DeleteShortcutConfig struct {
-	GameNames  []string
-	Info       DataInfo
-	FileAccess *sync.Mutex
+	GameNames []string
+	Info      DataInfo
 }
 
 type NewShortcutResult struct {
@@ -69,9 +66,6 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 }
 
 func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (bool, error) {
-	config.FileAccess.Lock()
-	defer config.FileAccess.Unlock()
-
 	var fileAlreadyExists bool
 	_, statErr := os.Stat(shortcutsFilePath)
 	if statErr == nil {
@@ -179,9 +173,6 @@ func DeleteShortcutPerId(config DeleteShortcutConfig) DeletedShortcutsForSteamId
 }
 
 func DeleteShortcuts(config DeleteShortcutConfig, shortcutsFilePath string) (DeletedShortcutResult, error) {
-	config.FileAccess.Lock()
-	defer config.FileAccess.Unlock()
-
 	f, err := os.OpenFile(shortcutsFilePath, os.O_RDWR, defaultShortcutsFileMode)
 	if err != nil {
 		return DeletedShortcutResult{}, err
