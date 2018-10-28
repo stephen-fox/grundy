@@ -26,7 +26,6 @@ type configFile interface {
 }
 
 type iniConfigFile struct {
-	configFile
 	mutex *sync.Mutex
 	ini   *ini.File
 }
