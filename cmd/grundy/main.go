@@ -11,9 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kardianos/service"
+	"github.com/stephen-fox/grundy/internal/daemonw"
 	"github.com/stephen-fox/grundy/internal/lock"
-	"github.com/stephen-fox/grundy/internal/servicew"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/shortman"
 	"github.com/stephen-fox/grundy/internal/steamw"
@@ -25,8 +24,6 @@ const (
 	description = "Grundy crushes your games into Steam shortcuts " +
 		"so you do not have to! Please refer to the usage documentation " +
 		"at https://github.com/stephen-fox/grundy for more information."
-
-	daemonStatusPrefix = "Daemon status - "
 
 	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
@@ -43,7 +40,7 @@ type application struct {
 	stop    chan chan struct{}
 }
 
-func (o *application) Start(s service.Service) error {
+func (o *application) Start() error {
 	log.Println("Starting...")
 
 	go mainLoop(o.primary, o.stop)
@@ -51,7 +48,7 @@ func (o *application) Start(s service.Service) error {
 	return nil
 }
 
-func (o *application) Stop(s service.Service) error {
+func (o *application) Stop() error {
 	log.Println("Stopping...")
 
 	c := make(chan struct{})
@@ -60,16 +57,6 @@ func (o *application) Stop(s service.Service) error {
 
 	log.Println("Finished stopping resources")
 
-	return nil
-}
-
-type dummyService struct {}
-
-func (o *dummyService) Start(s service.Service) error {
-	return nil
-}
-
-func (o *dummyService) Stop(s service.Service) error {
 	return nil
 }
 
@@ -83,9 +70,11 @@ type primarySettings struct {
 }
 
 func main() {
-	appSettingsDirPath := flag.String(appSettingsDirPathArg, settings.DirPath(), "The directory to store application settings")
-	daemonCommand := flag.String(daemonCommandArg, "", "Manage the application's daemon with the following commands:\n" +
-		"'status', 'start', 'stop', 'install', 'uninstall'")
+	appSettingsDirPath := flag.String(appSettingsDirPathArg, settings.DirPath(),
+		"The directory to store application settings")
+	daemonCommand := flag.String(daemonCommandArg, "",
+		"Manage the application's daemon with the following commands:\n" +
+		daemonw.CommandsString())
 	help := flag.Bool(helpArg, false, "Show this help information")
 
 	flag.Parse()
@@ -96,16 +85,20 @@ func main() {
 		os.Exit(0)
 	}
 
-	serviceConfig, err := servicew.Config(name, description)
+	daemonConfig, err := daemonw.GetConfig(name, description)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal("Failed to create daemon config - " + err.Error())
 	}
 
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
-		err := executeDaemonCommand(serviceConfig, *daemonCommand)
+		log.Println("Executing daemon command '" + *daemonCommand + "'...")
+
+		output, err := daemonw.ExecuteCommand(daemonw.Command(*daemonCommand), daemonConfig)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
+
+		log.Println(output)
 
 		os.Exit(0)
 	}
@@ -141,12 +134,7 @@ func main() {
 		stop:    make(chan chan struct{}),
 	}
 
-	s, err := service.New(app, serviceConfig)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	err = s.Run()
+	err = daemonw.BlockAndRun(app, daemonConfig)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -251,42 +239,6 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 
 	for id, err := range result.IdsToFailures {
 		log.Println("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
-	}
-
-	return nil
-}
-
-func executeDaemonCommand(serviceConfig *service.Config, command string) error {
-	s, err := service.New(&dummyService{}, serviceConfig)
-	if err != nil {
-		return err
-	}
-
-	command = strings.ToLower(command)
-
-	if command == "status" {
-		status, err := s.Status()
-		if err != nil {
-			return err
-		}
-
-		switch status {
-		case service.StatusRunning:
-			log.Println(daemonStatusPrefix + "running")
-		case service.StatusStopped:
-			log.Println(daemonStatusPrefix + "stopped")
-		case service.StatusUnknown:
-			log.Println(daemonStatusPrefix + "unknown")
-		default:
-			log.Println("Daemon status could not be determined")
-		}
-	} else {
-		log.Println("Executing '" + command + "' daemon control command...")
-
-		err := service.Control(s, command)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
