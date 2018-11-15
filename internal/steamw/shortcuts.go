@@ -49,7 +49,7 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 	for steamUserId := range config.Info.IdsToDirPaths {
 		shortcutsPath := locations.ShortcutsFilePath(config.Info.DataLocations.RootDirPath(), steamUserId)
 
-		fileUpdateResult, err := CreateOrUpdateShortcut(config, shortcutsPath)
+		fileUpdateResult, err := createOrUpdateShortcut(config, shortcutsPath)
 		if err != nil {
 			result.IdsToFailures[steamUserId] = err
 			continue
@@ -66,7 +66,7 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 	return result
 }
 
-func CreateOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
+func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
 	var options string
 
 	if config.Game.ShouldOverrideLauncherArgs() {
@@ -127,7 +127,7 @@ func DeleteShortcutPerId(config DeleteShortcutConfig) DeletedShortcutsForSteamId
 	for steamUserId := range config.Info.IdsToDirPaths {
 		shortcutsPath := locations.ShortcutsFilePath(config.Info.DataLocations.RootDirPath(), steamUserId)
 
-		delResult, err := DeleteShortcuts(config, shortcutsPath)
+		delResult, err := deleteShortcuts(config, shortcutsPath)
 		if err != nil {
 			result.IdsToFailures[steamUserId] = err
 			continue
@@ -145,7 +145,7 @@ func DeleteShortcutPerId(config DeleteShortcutConfig) DeletedShortcutsForSteamId
 	return result
 }
 
-func DeleteShortcuts(config DeleteShortcutConfig, shortcutsFilePath string) (DeletedShortcutResult, error) {
+func deleteShortcuts(config DeleteShortcutConfig, shortcutsFilePath string) (DeletedShortcutResult, error) {
 	f, err := os.OpenFile(shortcutsFilePath, os.O_RDWR, defaultShortcutsFileMode)
 	if err != nil {
 		return DeletedShortcutResult{}, err
