@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<installer-gui-script minSpecVersion="1">
+    <pkg-ref id="PACKAGE_REF_ID"/>
+    <title>INSTALLER_TITLE</title>
+    <options customize="never" require-scripts="false"/>
+    <choices-outline>
+        <line choice="default">
+            <line choice="PACKAGE_REF_ID"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="PACKAGE_REF_ID" visible="false">
+        <pkg-ref id="PACKAGE_REF_ID"/>
+    </choice>
+    <pkg-ref id="PACKAGE_REF_ID" onConclusion="none">application-files.pkg</pkg-ref>
+</installer-gui-script>

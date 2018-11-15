@@ -1,47 +1,143 @@
 apply plugin: 'base'
 
+group = 'com.github.stephen-fox'
 version = externalVersion
 
+String applicationId = group.toString() + '.' + project.name
+List<String> ldFlags = [
+        '-X main.version=' + version.toString(),
+        '-X main.id=' + applicationId,
+        '-s',
+        '-w']
+
+File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
+File resourcesDir = file('resources')
+File applicationResourcesDir = file(resourcesDir.absolutePath + '/application')
+File macosAppDir = file(buildDir.absolutePath + '/cleanroom/' + project.name + '.app')
+
+task buildInstallerMacos(type: Task) {
+    dependsOn 'buildApplicationMacos'
+    description 'Builds the macOS installer.'
+    group 'build'
+    doLast {
+        File macosInstallerFilesDir = file(resourcesDir.absolutePath + '/installer/macos')
+        assert macosInstallerFilesDir.exists()
+        copy {
+            from macosInstallerFilesDir
+            into buildDir
+        }
+
+        File componentPlist = file(buildDir.absolutePath + '/component.plist')
+        componentPlist.text = componentPlist.text.replace('APPLICATION_NAME', project.name)
+
+        File distributionXml = file(buildDir.absolutePath + '/distribution.xml')
+        distributionXml.text = distributionXml.text.replace('INSTALLER_TITLE',
+                project.name.toString() + ' ' + version.toString())
+        distributionXml.text = distributionXml.text.replace('PACKAGE_REF_ID', applicationId)
+
+        File applicationFilesPkg = file(buildDir.absolutePath + '/application-files.pkg')
+
+        exec {
+            commandLine 'pkgbuild',
+                    '--version', project.version.toString(),
+                    '--root', macosAppDir.parentFile.absolutePath,
+                    '--component-plist', componentPlist.absolutePath,
+                    '--scripts', buildDir.absolutePath,
+                    '--install-location', '/Applications',
+                    applicationFilesPkg.absolutePath
+        }
+
+        exec {
+            commandLine 'productbuild',
+                    '--version', project.version.toString(),
+                    '--distribution', distributionXml.absolutePath,
+                    '--resources', buildDir.absolutePath,
+                    '--package-path', buildDir.absolutePath,
+                    buildDir.absolutePath + '/' + project.name + '.pkg'
+        }
+
+        applicationFilesPkg.delete()
+
+        // Remove the .app because macOS will think it is installed there.
+        macosAppDir.deleteDir()
+    }
+}
+
 task buildApplicationMacos(type: Task) {
-    description 'Builds the application for macOS.'
+    dependsOn 'buildExeMacos'
+    description 'Builds the macOS .app.'
     group 'build'
     doLast {
-        File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
-        List<String> ldFlags = ['-X main.version=' + version.toString(), '-s', '-w']
+        String bundleSignature = "grnd"
+        File contents = file(macosAppDir.absolutePath + '/Contents')
+        File macOs = file(contents.absolutePath + '/MacOS')
+        File cResources = file(contents.absolutePath + '/Resources')
 
-        if (goBuild(sourcesDir, buildDir, project.name, 'darwin', 'amd64', ldFlags) > 0) {
-            throw new GradleException('Failed to compile the application for macOS')
+        if ((!macOs.exists() && !macOs.mkdirs()) ||  (!cResources.exists() && !cResources.mkdirs())) {
+            throw new GradleException('Failed to create macOS .app sub directories')
         }
+
+        File pkgInfo = file(contents.absolutePath + '/PkgInfo')
+        pkgInfo.text = 'APPL' + bundleSignature
+
+        File exe = file(buildDir.absolutePath + '/' + project.name + '-darwin-amd64')
+        assert exe.exists()
+        copy {
+            from exe
+            into macOs
+            rename (exe.name, project.name)
+        }
+
+        // TODO: Add macOS application icon.
+//        File icns = file(resourcesDir.absolutePath + '/icon/app.icns')
+//        assert icns.exists()
+//        copy {
+//            from icns
+//            into cResources
+//        }
+
+        File infoPlist = file(applicationResourcesDir.absolutePath + '/macos/Info.plist')
+        assert infoPlist.exists()
+        copy {
+            from infoPlist
+            into contents
+        }
+
+        File updatedPlist = file(contents.absolutePath + '/' + infoPlist.name)
+        updatedPlist.text = updatedPlist.text.replace('APP_NAME', project.name)
+        updatedPlist.text = updatedPlist.text.replace('IDENTIFIER', applicationId)
+        updatedPlist.text = updatedPlist.text.replace('EXECUTABLE_NAME', project.name)
+        updatedPlist.text = updatedPlist.text.replace('VERSION', version.toString())
+//        updatedPlist.text = updatedPlist.text.replace('ICON_NAME', icns.name)
+        updatedPlist.text = updatedPlist.text.replace('BUNDLE_SIGNATURE', bundleSignature)
     }
 }
 
-task buildApplicationLinux(type: Task) {
-    description 'Builds the application for Linux.'
+task buildExeMacos(type: Task) {
+    description 'Builds the executable for macOS.'
     group 'build'
     doLast {
-        File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
-        List<String> ldFlags = ['-X main.version=' + version.toString(), '-s', '-w']
-
-        if (goBuild(sourcesDir, buildDir, project.name, 'linux', 'amd64', ldFlags) > 0) {
-            throw new GradleException('Failed to compile the application for Linux')
-        }
+        goBuild(sourcesDir, buildDir, project.name, 'darwin', 'amd64', ldFlags)
     }
 }
 
-task buildApplicationWindows(type: Task) {
-    description 'Builds the application for Windows.'
+task buildExeLinux(type: Task) {
+    description 'Builds the executable for Linux.'
     group 'build'
     doLast {
-        File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
-        List<String> ldFlags = ['-X main.version=' + version.toString(), '-s', '-w']
-
-        if (goBuild(sourcesDir, buildDir, project.name, 'windows', 'amd64', ldFlags) > 0) {
-            throw new GradleException('Failed to compile the application for Windows')
-        }
+        goBuild(sourcesDir, buildDir, project.name, 'linux', 'amd64', ldFlags)
     }
 }
 
-int goBuild(File sourceCodeDir, File outputDir, String binaryName, String os, String arch, List<String> ldFlags) {
+task buildExeMWindows(type: Task) {
+    description 'Builds the executable for Windows.'
+    group 'build'
+    doLast {
+        goBuild(sourcesDir, buildDir, project.name, 'windows', 'amd64', ldFlags)
+    }
+}
+
+void goBuild(File sourceCodeDir, File outputDir, String binaryName, String os, String arch, List<String> ldFlags) throws GradleException {
     List<String> command = ['go', 'build']
 
     if (!arch?.trim()) {
@@ -66,9 +162,13 @@ int goBuild(File sourceCodeDir, File outputDir, String binaryName, String os, St
 
     logger.quiet('Compiling ' + sourceCodeDir.absolutePath + ' for ' + os + ', ' + arch + '...')
 
-    return exec {
+    ExecResult result = exec {
         environment GOARCH: arch, GOOS: os
         workingDir sourceCodeDir.absolutePath
         commandLine command
-    }.exitValue
+    }
+
+    if (result.exitValue > 0) {
+        throw new GradleException('Failed to compile application for ' + os + ', ' + arch)
+    }
 }

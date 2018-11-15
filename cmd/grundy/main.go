@@ -34,6 +34,7 @@ const (
 )
 
 var (
+	id      string
 	version string
 )
 
@@ -344,7 +345,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			logShortcutManagerResult(result)
 
 			if result.Created.IsErr() || result.Deleted.IsErr() {
-
+				// TODO: Do something?
 			}
 		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
