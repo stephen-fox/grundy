@@ -1,0 +1,11 @@
+#!/bin/bash
+
+logFilePath=/tmp/grundy-install.log
+
+echo "$(date)" >> "${logFilePath}"
+
+open -W -b com.github.stephen-fox.grundy --args -install >> "${logFilePath}" 2>&1
+
+echo "----------------------------------------" >> "${logFilePath}"
+
+exit $?

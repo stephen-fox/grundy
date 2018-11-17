@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stephen-fox/grundy/internal/daemonw"
+	"github.com/stephen-fox/grundy/internal/installer"
 	"github.com/stephen-fox/grundy/internal/lock"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/shortman"
@@ -25,6 +26,8 @@ const (
 		"so you do not have to! Please refer to the usage documentation " +
 		"at https://github.com/stephen-fox/grundy for more information."
 
+	installArg            = "install"
+	uninstallArg          = "uninstall"
 	daemonCommandArg      = "daemon"
 	appSettingsDirPathArg = "settings"
 	helpArg               = "h"
@@ -70,6 +73,8 @@ type primarySettings struct {
 }
 
 func main() {
+	doInstall := flag.Bool(installArg, false, "Installs the application")
+	doUninstall := flag.Bool(uninstallArg, false, "Uninstalls the application")
 	appSettingsDirPath := flag.String(appSettingsDirPathArg, settings.DirPath(),
 		"The directory to store application settings")
 	daemonCommand := flag.String(daemonCommandArg, "",
@@ -88,6 +93,24 @@ func main() {
 	daemonConfig, err := daemonw.GetConfig(daemonId, description)
 	if err != nil {
 		log.Fatal("Failed to create daemon config - " + err.Error())
+	}
+
+	if *doInstall {
+		err := installer.Install(daemonConfig)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		os.Exit(0)
+	}
+
+	if *doUninstall {
+		err := installer.Uninstall(daemonConfig)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+
+		os.Exit(0)
 	}
 
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
