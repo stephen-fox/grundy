@@ -27,25 +27,18 @@ func (o *dummyService) Stop(s service.Service) error {
 }
 
 func ExecuteCommand(command Command, config Config) (string, error) {
-	s, err := service.New(&dummyService{}, toServiceConfig(config))
-	if err != nil {
-		return "", err
-	}
-
-	if command == Status {
-		status, err := s.Status()
+	if command == GetStatus {
+		status, err := CurrentStatus(config)
 		if err != nil {
 			return "", err
 		}
 
-		switch status {
-		case service.StatusRunning:
-			return runningStatus, nil
-		case service.StatusStopped:
-			return stoppedStatus, nil
-		}
+		return status.printableStatus(), nil
+	}
 
-		return unknownStatus, nil
+	s, err := service.New(&dummyService{}, toServiceConfig(config))
+	if err != nil {
+		return "", err
 	}
 
 	err = service.Control(s, command.string())
@@ -54,6 +47,27 @@ func ExecuteCommand(command Command, config Config) (string, error) {
 	}
 
 	return executedCommandMessage(command), nil
+}
+
+func CurrentStatus(config Config) (Status, error) {
+	s, err := service.New(&dummyService{}, toServiceConfig(config))
+	if err != nil {
+		return Unknown, err
+	}
+
+	status, err := s.Status()
+	if err != nil {
+		return Unknown, err
+	}
+
+	switch status {
+	case service.StatusRunning:
+		return Running, nil
+	case service.StatusStopped:
+		return Stopped, nil
+	}
+
+	return Unknown, nil
 }
 
 func BlockAndRun(logic ApplicationLogic, config Config) error {

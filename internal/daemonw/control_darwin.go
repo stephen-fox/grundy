@@ -8,22 +8,13 @@ import (
 )
 
 func ExecuteCommand(command Command, config Config) (string, error) {
-	if command == Status {
-		details, err := launchctlutil.CurrentStatus(config.Name)
+	if command == GetStatus {
+		status, err := CurrentStatus(config)
 		if err != nil {
 			return "", err
 		}
 
-		switch details.Status {
-		case launchctlutil.NotInstalled:
-			return notInstalledStatus, nil
-		case launchctlutil.NotRunning:
-			return stoppedStatus, nil
-		case launchctlutil.Running:
-			return runningStatus, nil
-		}
-
-		return unknownStatus, nil
+		return status.printableStatus(), nil
 	}
 
 	lconfig, err := toLaunchdConfig(config)
@@ -71,6 +62,24 @@ func ExecuteCommand(command Command, config Config) (string, error) {
 		isUnknown: true,
 		command:   command,
 	}
+}
+
+func CurrentStatus(config Config) (Status, error) {
+	details, err := launchctlutil.CurrentStatus(config.Name)
+	if err != nil {
+		return "", err
+	}
+
+	switch details.Status {
+	case launchctlutil.NotInstalled:
+		return NotInstalled, nil
+	case launchctlutil.NotRunning:
+		return Stopped, nil
+	case launchctlutil.Running:
+		return Running, nil
+	}
+
+	return Unknown, nil
 }
 
 func BlockAndRun(logic ApplicationLogic, config Config) error {

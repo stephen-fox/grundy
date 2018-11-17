@@ -1,22 +1,33 @@
 package daemonw
 
-import "strings"
-
-const (
-	runningStatus      = daemonStatusPrefix + "running"
-	stoppedStatus      = daemonStatusPrefix + "stopped"
-	unknownStatus      = daemonStatusPrefix + "unknown"
-	notInstalledStatus = daemonStatusPrefix + "not installed"
-	daemonStatusPrefix = "Daemon status - "
+import (
+	"strings"
 )
 
 const (
-	Status    Command = "status"
+	daemonStatusPrefix = "Daemon status - "
+
+	Unknown      Status = "unknown"
+	Running      Status = "running"
+	Stopped      Status = "stopped"
+	NotInstalled Status = "not installed"
+
+	GetStatus Command = "status"
 	Start     Command = "start"
 	Stop      Command = "stop"
 	Install   Command = "install"
 	Uninstall Command = "uninstall"
 )
+
+type Status string
+
+func (o Status) printableStatus() string {
+	return daemonStatusPrefix + string(o)
+}
+
+func (o Status) string() string {
+	return string(o)
+}
 
 type Command string
 
@@ -41,7 +52,7 @@ func CommandsString() string {
 
 func Commands() []string {
 	return []string{
-		Status.string(),
+		GetStatus.string(),
 		Start.string(),
 		Stop.string(),
 		Install.string(),
