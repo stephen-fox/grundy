@@ -1,4 +1,4 @@
-package daemonw
+package cyberdaemon
 
 import (
 	"github.com/kardianos/service"

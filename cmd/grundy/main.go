@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stephen-fox/grundy/internal/daemonw"
+	"github.com/stephen-fox/grundy/internal/cyberdaemon"
 	"github.com/stephen-fox/grundy/internal/installer"
 	"github.com/stephen-fox/grundy/internal/lock"
 	"github.com/stephen-fox/grundy/internal/settings"
@@ -79,7 +79,7 @@ func main() {
 		"The directory to store application settings")
 	daemonCommand := flag.String(daemonCommandArg, "",
 		"Manage the application's daemon with the following commands:\n" +
-		daemonw.CommandsString())
+		cyberdaemon.CommandsString())
 	help := flag.Bool(helpArg, false, "Show this help information")
 
 	flag.Parse()
@@ -90,12 +90,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	daemonConfig, err := daemonw.GetConfig(daemonId, description)
+	daemonConfig, err := cyberdaemon.GetConfig(daemonId, description)
 	if err != nil {
 		log.Fatal("Failed to create daemon config - " + err.Error())
 	}
 
-	daemon, err := daemonw.NewDaemon(daemonConfig)
+	daemon, err := cyberdaemon.NewDaemon(daemonConfig)
 	if err != nil {
 		log.Fatal("Failed to create daemon - " + err.Error())
 	}
@@ -121,7 +121,7 @@ func main() {
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
 		log.Println("Executing daemon command '" + *daemonCommand + "'...")
 
-		output, err := daemon.ExecuteCommand(daemonw.Command(*daemonCommand))
+		output, err := daemon.ExecuteCommand(cyberdaemon.Command(*daemonCommand))
 		if err != nil {
 			log.Fatal(err.Error())
 		}

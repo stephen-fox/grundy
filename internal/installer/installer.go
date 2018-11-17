@@ -1,14 +1,14 @@
 package installer
 
 import (
-	"github.com/stephen-fox/grundy/internal/daemonw"
+	"github.com/stephen-fox/grundy/internal/cyberdaemon"
 )
 
-func Install(d daemonw.Daemon) error {
+func Install(d cyberdaemon.Daemon) error {
 	// Attempt to remove any existing stuff.
 	Uninstall(d)
 
-	_, err := d.ExecuteCommand(daemonw.Install)
+	_, err := d.ExecuteCommand(cyberdaemon.Install)
 	if err != nil {
 		return err
 	}
@@ -22,13 +22,13 @@ func Install(d daemonw.Daemon) error {
 	}
 
 	switch status {
-	case daemonw.NotInstalled:
+	case cyberdaemon.NotInstalled:
 		return InstallError{
 			reason:                     "Daemon installation failed for unknown reason",
 			daemonInstallFailedUnknown: true,
 		}
-	case daemonw.Stopped:
-		_, err := d.ExecuteCommand(daemonw.Start)
+	case cyberdaemon.Stopped:
+		_, err := d.ExecuteCommand(cyberdaemon.Start)
 		if err != nil {
 			return InstallError{
 				reason:            "Failed to start daemon after install - " + err.Error(),
@@ -40,14 +40,14 @@ func Install(d daemonw.Daemon) error {
 	return nil
 }
 
-func Uninstall(d daemonw.Daemon) error {
+func Uninstall(d cyberdaemon.Daemon) error {
 	status, statusErr := d.Status()
-	if statusErr == nil && status == daemonw.NotInstalled {
+	if statusErr == nil && status == cyberdaemon.NotInstalled {
 		return nil
 	}
 
-	if status == daemonw.Running {
-		_, err := d.ExecuteCommand(daemonw.Stop)
+	if status == cyberdaemon.Running {
+		_, err := d.ExecuteCommand(cyberdaemon.Stop)
 		if err != nil {
 			return UninstallError{
 				reason:           "Failed to stop running daemon before uninstall",
@@ -56,7 +56,7 @@ func Uninstall(d daemonw.Daemon) error {
 		}
 	}
 
-	_, err := d.ExecuteCommand(daemonw.Uninstall)
+	_, err := d.ExecuteCommand(cyberdaemon.Uninstall)
 	if err != nil {
 		return UninstallError{
 			reason:                err.Error(),

@@ -1,4 +1,4 @@
-package daemonw
+package cyberdaemon
 
 func GetConfig(name string, description string) (Config, error) {
 	return Config{

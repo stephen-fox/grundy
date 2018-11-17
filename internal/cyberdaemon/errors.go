@@ -1,4 +1,4 @@
-package daemonw
+package cyberdaemon
 
 type CommandError struct {
 	reason    string

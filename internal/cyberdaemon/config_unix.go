@@ -1,6 +1,6 @@
 // +build !windows
 
-package daemonw
+package cyberdaemon
 
 import (
 	"os/user"
