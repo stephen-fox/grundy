@@ -6,15 +6,16 @@ const (
 	runningStatus      = daemonStatusPrefix + "running"
 	stoppedStatus      = daemonStatusPrefix + "stopped"
 	unknownStatus      = daemonStatusPrefix + "unknown"
+	notInstalledStatus = daemonStatusPrefix + "not installed"
 	daemonStatusPrefix = "Daemon status - "
 )
 
 const (
-	status    Command = "status"
-	start     Command = "start"
-	stop      Command = "stop"
-	install   Command = "install"
-	uninstall Command = "uninstall"
+	Status    Command = "status"
+	Start     Command = "start"
+	Stop      Command = "stop"
+	Install   Command = "install"
+	Uninstall Command = "uninstall"
 )
 
 type Command string
@@ -40,11 +41,11 @@ func CommandsString() string {
 
 func Commands() []string {
 	return []string{
-		status.string(),
-		start.string(),
-		stop.string(),
-		install.string(),
-		uninstall.string(),
+		Status.string(),
+		Start.string(),
+		Stop.string(),
+		Install.string(),
+		Uninstall.string(),
 	}
 }
 

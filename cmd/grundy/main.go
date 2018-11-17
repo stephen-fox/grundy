@@ -31,8 +31,8 @@ const (
 )
 
 var (
-	id      string
-	version string
+	daemonId string
+	version  string
 )
 
 type application struct {
@@ -85,7 +85,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	daemonConfig, err := daemonw.GetConfig(name, description)
+	daemonConfig, err := daemonw.GetConfig(daemonId, description)
 	if err != nil {
 		log.Fatal("Failed to create daemon config - " + err.Error())
 	}
@@ -98,7 +98,9 @@ func main() {
 			log.Fatal(err.Error())
 		}
 
-		log.Println(output)
+		if len(output) > 0 {
+			log.Println(output)
+		}
 
 		os.Exit(0)
 	}

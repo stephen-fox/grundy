@@ -4,11 +4,11 @@ group = 'com.github.stephen-fox'
 version = externalVersion
 
 String applicationId = group.toString() + '.' + project.name
-List<String> ldFlags = [
+List<String> baseLdFlags = [
         '-X main.version=' + version.toString(),
-        '-X main.id=' + applicationId,
         '-s',
         '-w']
+String daemonIdPrefix = '-X main.daemonId='
 
 File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
 File resourcesDir = file('resources')
@@ -117,7 +117,8 @@ task buildExeMacos(type: Task) {
     description 'Builds the executable for macOS.'
     group 'build'
     doLast {
-        goBuild(sourcesDir, buildDir, project.name, 'darwin', 'amd64', ldFlags)
+        baseLdFlags.add(daemonIdPrefix + applicationId)
+        goBuild(sourcesDir, buildDir, project.name, 'darwin', 'amd64', baseLdFlags)
     }
 }
 
@@ -125,7 +126,8 @@ task buildExeLinux(type: Task) {
     description 'Builds the executable for Linux.'
     group 'build'
     doLast {
-        goBuild(sourcesDir, buildDir, project.name, 'linux', 'amd64', ldFlags)
+        baseLdFlags.add(daemonIdPrefix + applicationId)
+        goBuild(sourcesDir, buildDir, project.name, 'linux', 'amd64', baseLdFlags)
     }
 }
 
@@ -133,7 +135,8 @@ task buildExeMWindows(type: Task) {
     description 'Builds the executable for Windows.'
     group 'build'
     doLast {
-        goBuild(sourcesDir, buildDir, project.name, 'windows', 'amd64', ldFlags)
+        baseLdFlags.add(daemonIdPrefix + project.name)
+        goBuild(sourcesDir, buildDir, project.name, 'windows', 'amd64', baseLdFlags)
     }
 }
 

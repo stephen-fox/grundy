@@ -32,7 +32,7 @@ func ExecuteCommand(command Command, config Config) (string, error) {
 		return "", err
 	}
 
-	if command == status {
+	if command == Status {
 		status, err := s.Status()
 		if err != nil {
 			return "", err
