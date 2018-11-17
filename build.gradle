@@ -89,12 +89,12 @@ task buildApplicationMacos(type: Task) {
         }
 
         // TODO: Add macOS application icon.
-//        File icns = file(resourcesDir.absolutePath + '/icon/app.icns')
-//        assert icns.exists()
-//        copy {
-//            from icns
-//            into cResources
-//        }
+        //File icns = file(resourcesDir.absolutePath + '/icon/app.icns')
+        //assert icns.exists()
+        //copy {
+        //    from icns
+        //    into cResources
+        //}
 
         File infoPlist = file(applicationResourcesDir.absolutePath + '/macos/Info.plist')
         assert infoPlist.exists()
@@ -108,7 +108,8 @@ task buildApplicationMacos(type: Task) {
         updatedPlist.text = updatedPlist.text.replace('IDENTIFIER', applicationId)
         updatedPlist.text = updatedPlist.text.replace('EXECUTABLE_NAME', project.name)
         updatedPlist.text = updatedPlist.text.replace('VERSION', version.toString())
-//        updatedPlist.text = updatedPlist.text.replace('ICON_NAME', icns.name)
+        // TODO: Add macOS application icon.
+        //updatedPlist.text = updatedPlist.text.replace('ICON_NAME', icns.name)
         updatedPlist.text = updatedPlist.text.replace('BUNDLE_SIGNATURE', bundleSignature)
     }
 }
