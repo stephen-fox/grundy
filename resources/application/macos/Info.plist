@@ -22,8 +22,6 @@
     <string>10.8</string>
     <key>LSBackgroundOnly</key>
     <true/>
-    <key>LSMultipleInstancesProhibited</key>
-    <true/>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundlePackageType</key>
