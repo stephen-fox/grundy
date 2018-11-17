@@ -95,8 +95,13 @@ func main() {
 		log.Fatal("Failed to create daemon config - " + err.Error())
 	}
 
+	daemon, err := daemonw.NewDaemon(daemonConfig)
+	if err != nil {
+		log.Fatal("Failed to create daemon - " + err.Error())
+	}
+
 	if *doInstall {
-		err := installer.Install(daemonConfig)
+		err := installer.Install(daemon)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -105,7 +110,7 @@ func main() {
 	}
 
 	if *doUninstall {
-		err := installer.Uninstall(daemonConfig)
+		err := installer.Uninstall(daemon)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -116,7 +121,7 @@ func main() {
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
 		log.Println("Executing daemon command '" + *daemonCommand + "'...")
 
-		output, err := daemonw.ExecuteCommand(daemonw.Command(*daemonCommand), daemonConfig)
+		output, err := daemon.ExecuteCommand(daemonw.Command(*daemonCommand))
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -159,7 +164,7 @@ func main() {
 		stop:    make(chan chan struct{}),
 	}
 
-	err = daemonw.BlockAndRun(app, daemonConfig)
+	err = daemon.BlockAndRun(app)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

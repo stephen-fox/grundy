@@ -26,9 +26,13 @@ func (o *dummyService) Stop(s service.Service) error {
 	return nil
 }
 
-func ExecuteCommand(command Command, config Config) (string, error) {
+type windowsDaemon struct {
+	config *service.Config
+}
+
+func (o *windowsDaemon) ExecuteCommand(command Command) (string, error) {
 	if command == GetStatus {
-		status, err := CurrentStatus(config)
+		status, err := o.Status()
 		if err != nil {
 			return "", err
 		}
@@ -36,7 +40,7 @@ func ExecuteCommand(command Command, config Config) (string, error) {
 		return status.printableStatus(), nil
 	}
 
-	s, err := service.New(&dummyService{}, toServiceConfig(config))
+	s, err := service.New(&dummyService{}, o.config)
 	if err != nil {
 		return "", err
 	}
@@ -49,8 +53,8 @@ func ExecuteCommand(command Command, config Config) (string, error) {
 	return executedCommandMessage(command), nil
 }
 
-func CurrentStatus(config Config) (Status, error) {
-	s, err := service.New(&dummyService{}, toServiceConfig(config))
+func (o *windowsDaemon) Status() (Status, error) {
+	s, err := service.New(&dummyService{}, o.config)
 	if err != nil {
 		return Unknown, err
 	}
@@ -70,8 +74,8 @@ func CurrentStatus(config Config) (Status, error) {
 	return Unknown, nil
 }
 
-func BlockAndRun(logic ApplicationLogic, config Config) error {
-	s, err := service.New(toServiceInterface(logic), toServiceConfig(config))
+func (o *windowsDaemon) BlockAndRun(logic ApplicationLogic) error {
+	s, err := service.New(toServiceInterface(logic), o.config)
 	if err != nil {
 		return err
 	}
@@ -84,17 +88,21 @@ func BlockAndRun(logic ApplicationLogic, config Config) error {
 	return nil
 }
 
-func toServiceInterface(logic ApplicationLogic) service.Interface {
-	return &appLogicWrapper{
-		logic: logic,
-	}
-}
-
-func toServiceConfig(config Config) *service.Config {
-	return &service.Config{
+func NewDaemon(config Config) (Daemon, error) {
+	sconfig := &service.Config{
 		Name:        config.Name,
 		DisplayName: config.Name,
 		Description: config.Description,
 		UserName:    config.Username,
+	}
+
+	return &windowsDaemon{
+		config: sconfig,
+	}, nil
+}
+
+func toServiceInterface(logic ApplicationLogic) service.Interface {
+	return &appLogicWrapper{
+		logic: logic,
 	}
 }

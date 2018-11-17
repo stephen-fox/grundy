@@ -4,16 +4,16 @@ import (
 	"github.com/stephen-fox/grundy/internal/daemonw"
 )
 
-func Install(config daemonw.Config) error {
+func Install(d daemonw.Daemon) error {
 	// Attempt to remove any existing stuff.
-	Uninstall(config)
+	Uninstall(d)
 
-	_, err := daemonw.ExecuteCommand(daemonw.Install, config)
+	_, err := d.ExecuteCommand(daemonw.Install)
 	if err != nil {
 		return err
 	}
 
-	status, err := daemonw.CurrentStatus(config)
+	status, err := d.Status()
 	if err != nil {
 		return InstallError{
 			reason:         "Failed to get daemon status after installation - " + err.Error(),
@@ -28,7 +28,7 @@ func Install(config daemonw.Config) error {
 			daemonInstallFailedUnknown: true,
 		}
 	case daemonw.Stopped:
-		_, err := daemonw.ExecuteCommand(daemonw.Start, config)
+		_, err := d.ExecuteCommand(daemonw.Start)
 		if err != nil {
 			return InstallError{
 				reason:            "Failed to start daemon after install - " + err.Error(),
@@ -40,14 +40,14 @@ func Install(config daemonw.Config) error {
 	return nil
 }
 
-func Uninstall(config daemonw.Config) error {
-	status, statusErr := daemonw.CurrentStatus(config)
+func Uninstall(d daemonw.Daemon) error {
+	status, statusErr := d.Status()
 	if statusErr == nil && status == daemonw.NotInstalled {
 		return nil
 	}
 
 	if status == daemonw.Running {
-		_, err := daemonw.ExecuteCommand(daemonw.Stop, config)
+		_, err := d.ExecuteCommand(daemonw.Stop)
 		if err != nil {
 			return UninstallError{
 				reason:           "Failed to stop running daemon before uninstall",
@@ -56,7 +56,7 @@ func Uninstall(config daemonw.Config) error {
 		}
 	}
 
-	_, err := daemonw.ExecuteCommand(daemonw.Uninstall, config)
+	_, err := d.ExecuteCommand(daemonw.Uninstall)
 	if err != nil {
 		return UninstallError{
 			reason:                err.Error(),

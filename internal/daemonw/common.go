@@ -35,6 +35,12 @@ func (o Command) string() string {
 	return string(o)
 }
 
+type Daemon interface {
+	Status() (Status, error)
+	ExecuteCommand(Command) (string, error)
+	BlockAndRun(ApplicationLogic) error
+}
+
 type ApplicationLogic interface {
 	Start() error
 	Stop() error

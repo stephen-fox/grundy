@@ -7,65 +7,12 @@ import (
 	"github.com/stephen-fox/launchctlutil"
 )
 
-func ExecuteCommand(command Command, config Config) (string, error) {
-	if command == GetStatus {
-		status, err := CurrentStatus(config)
-		if err != nil {
-			return "", err
-		}
-
-		return status.printableStatus(), nil
-	}
-
-	lconfig, err := toLaunchdConfig(config)
-	if err != nil {
-		return "", err
-	}
-
-	switch command {
-	case Start:
-		err = launchctlutil.Start(lconfig.GetLabel(), lconfig.GetKind())
-		if err != nil {
-			return "", err
-		}
-
-		return "", nil
-	case Stop:
-		err = launchctlutil.Stop(lconfig.GetLabel(), lconfig.GetKind())
-		if err != nil {
-			return "", err
-		}
-
-		return "", nil
-	case Install:
-		err = launchctlutil.Install(lconfig)
-		if err != nil {
-			return "", err
-		}
-
-		return "", nil
-	case Uninstall:
-		filePath, err := lconfig.GetFilePath()
-		if err != nil {
-			return "", err
-		}
-
-		err = launchctlutil.Remove(filePath, lconfig.GetKind())
-		if err != nil {
-			return "", err
-		}
-
-		return "", nil
-	}
-
-	return "", CommandError{
-		isUnknown: true,
-		command:   command,
-	}
+type darwinDaemon struct {
+	config launchctlutil.Configuration
 }
 
-func CurrentStatus(config Config) (Status, error) {
-	details, err := launchctlutil.CurrentStatus(config.Name)
+func (o *darwinDaemon) Status() (Status, error) {
+	details, err := launchctlutil.CurrentStatus(o.config.GetLabel())
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +29,59 @@ func CurrentStatus(config Config) (Status, error) {
 	return Unknown, nil
 }
 
-func BlockAndRun(logic ApplicationLogic, config Config) error {
+func (o *darwinDaemon) ExecuteCommand(command Command) (string, error) {
+	if command == GetStatus {
+		status, err := o.Status()
+		if err != nil {
+			return "", err
+		}
+
+		return status.printableStatus(), nil
+	}
+
+	switch command {
+	case Start:
+		err := launchctlutil.Start(o.config.GetLabel(), o.config.GetKind())
+		if err != nil {
+			return "", err
+		}
+
+		return "", nil
+	case Stop:
+		err := launchctlutil.Stop(o.config.GetLabel(), o.config.GetKind())
+		if err != nil {
+			return "", err
+		}
+
+		return "", nil
+	case Install:
+		err := launchctlutil.Install(o.config)
+		if err != nil {
+			return "", err
+		}
+
+		return "", nil
+	case Uninstall:
+		filePath, err := o.config.GetFilePath()
+		if err != nil {
+			return "", err
+		}
+
+		err = launchctlutil.Remove(filePath, o.config.GetKind())
+		if err != nil {
+			return "", err
+		}
+
+		return "", nil
+	}
+
+	return "", CommandError{
+		isUnknown: true,
+		command:   command,
+	}
+}
+
+func (o *darwinDaemon) BlockAndRun(logic ApplicationLogic) error {
 	c := make(chan os.Signal)
 
 	signal.Notify(c, os.Interrupt)
@@ -103,10 +102,10 @@ func BlockAndRun(logic ApplicationLogic, config Config) error {
 	return nil
 }
 
-func toLaunchdConfig(config Config) (launchctlutil.Configuration, error) {
+func NewDaemon(config Config) (Daemon, error) {
 	exePath, err := os.Executable()
 	if err != nil {
-		return nil, err
+		return &darwinDaemon{}, err
 	}
 
 	lconfig, err := launchctlutil.NewConfigurationBuilder().
@@ -116,8 +115,10 @@ func toLaunchdConfig(config Config) (launchctlutil.Configuration, error) {
 		SetCommand(exePath).
 		Build()
 	if err != nil {
-		return nil, err
+		return &darwinDaemon{}, err
 	}
 
-	return lconfig, nil
+	return &darwinDaemon{
+		config: lconfig,
+	}, nil
 }
