@@ -65,18 +65,18 @@ task buildInstallerMacos(type: Task) {
         assert macosInstallerFilesDir.exists()
         copy {
             from macosInstallerFilesDir
-            into buildDir
+            into installerCleanroomDir
         }
 
-        File componentPlist = file(buildDir.absolutePath + '/component.plist')
+        File componentPlist = file(installerCleanroomDir.absolutePath + '/component.plist')
         componentPlist.text = componentPlist.text.replace('APPLICATION_NAME', project.name)
 
-        File distributionXml = file(buildDir.absolutePath + '/distribution.xml')
+        File distributionXml = file(installerCleanroomDir.absolutePath + '/distribution.xml')
         distributionXml.text = distributionXml.text.replace('INSTALLER_TITLE',
                 project.name.toString() + ' ' + version.toString())
         distributionXml.text = distributionXml.text.replace('PACKAGE_REF_ID', applicationId)
 
-        File applicationFilesPkg = file(buildDir.absolutePath + '/application-files.pkg')
+        File applicationFilesPkg = file(installerCleanroomDir.absolutePath + '/application-files.pkg')
 
         // TODO: Add license for macOS installer.
         exec {
@@ -84,7 +84,7 @@ task buildInstallerMacos(type: Task) {
                     '--version', project.version.toString(),
                     '--root', macosAppDir.parentFile.absolutePath,
                     '--component-plist', componentPlist.absolutePath,
-                    '--scripts', buildDir.absolutePath,
+                    '--scripts', installerCleanroomDir.absolutePath,
                     '--install-location', '/Applications',
                     applicationFilesPkg.absolutePath
         }
@@ -93,8 +93,8 @@ task buildInstallerMacos(type: Task) {
             commandLine 'productbuild',
                     '--version', project.version.toString(),
                     '--distribution', distributionXml.absolutePath,
-                    '--resources', buildDir.absolutePath,
-                    '--package-path', buildDir.absolutePath,
+                    '--resources', installerCleanroomDir.absolutePath,
+                    '--package-path', installerCleanroomDir.absolutePath,
                     buildDir.absolutePath + '/' + installerPrefix + '.pkg'
         }
 
