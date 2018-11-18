@@ -17,8 +17,9 @@ File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
 File resourcesDir = file('resources')
 File applicationResourcesDir = file(resourcesDir.absolutePath + '/application')
 File installerResourcesDir = file(resourcesDir.absolutePath + '/installer')
-File cleanroomDir = file(buildDir.absolutePath + '/cleanroom')
-File macosAppDir = file(cleanroomDir.absolutePath + '/' + project.name + '.app')
+File appCleanroomDir = file(buildDir.absolutePath + '/app-cleanroom')
+File installerCleanroomDir = file(buildDir.absolutePath + '/installer-cleanroom')
+File macosAppDir = file(appCleanroomDir.absolutePath + '/' + project.name + '.app')
 
 task buildInstallerWindows(type: Task) {
     dependsOn 'buildExeWindows'
@@ -33,13 +34,13 @@ task buildInstallerWindows(type: Task) {
         String exeFinalName = project.name + '.exe'
         copy {
             from exe
-            into cleanroomDir
+            into installerCleanroomDir
             rename (exe.name, exeFinalName)
         }
 
         exec {
             commandLine 'ISCC.exe',
-                    '/DApplicationFilesPath=' + cleanroomDir.absolutePath,
+                    '/DApplicationFilesPath=' + installerCleanroomDir.absolutePath,
                     '/DOutputPath=' + buildDir.absolutePath,
                     '/DAppNameOverride=' + project.name,
                     '/DAppPublisherOverride=' + publisher,
@@ -48,7 +49,7 @@ task buildInstallerWindows(type: Task) {
                     '/DAppVersionOverride=' + project.version,
                     '/DOutputBaseFilenameOverride=' + installerPrefix,
                     '/DAllowedArchitectureOverride=x64',
-                    // TODO: Add license.
+                    // TODO: Add license for Windows installer.
                     //'/DLicenseFileOverride=' + 'license_en_US.txt',
                     file(windowsInstallerFilesDir.absolutePath + '/installer.iss').absolutePath
         }
@@ -60,7 +61,7 @@ task buildInstallerMacos(type: Task) {
     description 'Builds the macOS installer.'
     group 'build'
     doLast {
-        File macosInstallerFilesDir = file(resourcesDir.absolutePath + '/installer/macos')
+        File macosInstallerFilesDir = file(installerResourcesDir.absolutePath + '/macos')
         assert macosInstallerFilesDir.exists()
         copy {
             from macosInstallerFilesDir
@@ -77,6 +78,7 @@ task buildInstallerMacos(type: Task) {
 
         File applicationFilesPkg = file(buildDir.absolutePath + '/application-files.pkg')
 
+        // TODO: Add license for macOS installer.
         exec {
             commandLine 'pkgbuild',
                     '--version', project.version.toString(),
@@ -93,7 +95,7 @@ task buildInstallerMacos(type: Task) {
                     '--distribution', distributionXml.absolutePath,
                     '--resources', buildDir.absolutePath,
                     '--package-path', buildDir.absolutePath,
-                    buildDir.absolutePath + '/' + project.name + '.pkg'
+                    buildDir.absolutePath + '/' + installerPrefix + '.pkg'
         }
 
         applicationFilesPkg.delete()
