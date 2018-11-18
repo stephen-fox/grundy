@@ -3,6 +3,7 @@ package cyberdaemon
 import (
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/stephen-fox/launchctlutil"
 )
@@ -84,7 +85,7 @@ func (o *darwinDaemon) ExecuteCommand(command Command) (string, error) {
 func (o *darwinDaemon) BlockAndRun(logic ApplicationLogic) error {
 	c := make(chan os.Signal)
 
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(c)
 
 	err := logic.Start()
