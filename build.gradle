@@ -9,11 +9,51 @@ List<String> baseLdFlags = [
         '-s',
         '-w']
 String daemonIdPrefix = '-X main.daemonId='
+String publisher = 'Stephen Fox'
+String projectUrl = 'https://github.com/stephen-fox/grundy'
+String installerPrefix = project.name + '-' + project.version
 
 File sourcesDir = file(projectDir.absolutePath + '/cmd/' + project.name)
 File resourcesDir = file('resources')
 File applicationResourcesDir = file(resourcesDir.absolutePath + '/application')
-File macosAppDir = file(buildDir.absolutePath + '/cleanroom/' + project.name + '.app')
+File installerResourcesDir = file(resourcesDir.absolutePath + '/installer')
+File cleanroomDir = file(buildDir.absolutePath + '/cleanroom')
+File macosAppDir = file(cleanroomDir.absolutePath + '/' + project.name + '.app')
+
+task buildInstallerWindows(type: Task) {
+    dependsOn 'buildExeWindows'
+    description 'Builds the Windows installer.'
+    group 'build'
+    doLast {
+        File windowsInstallerFilesDir = file(installerResourcesDir.absolutePath + '/windows')
+        assert windowsInstallerFilesDir.exists()
+
+        File exe = file(buildDir.absolutePath + '/' + project.name + '-windows-amd64.exe')
+        assert exe.exists()
+        String exeFinalName = project.name + '.exe'
+        copy {
+            from exe
+            into cleanroomDir
+            rename (exe.name, exeFinalName)
+        }
+
+        exec {
+            commandLine 'ISCC.exe',
+                    '/DApplicationFilesPath=' + cleanroomDir.absolutePath,
+                    '/DOutputPath=' + buildDir.absolutePath,
+                    '/DAppNameOverride=' + project.name,
+                    '/DAppPublisherOverride=' + publisher,
+                    '/DAppURLOverride=' + projectUrl,
+                    '/DAppExeNameOverride=' + exeFinalName,
+                    '/DAppVersionOverride=' + project.version,
+                    '/DOutputBaseFilenameOverride=' + installerPrefix,
+                    '/DAllowedArchitectureOverride=x64',
+                    // TODO: Add license.
+                    //'/DLicenseFileOverride=' + 'license_en_US.txt',
+                    file(windowsInstallerFilesDir.absolutePath + '/installer.iss').absolutePath
+        }
+    }
+}
 
 task buildInstallerMacos(type: Task) {
     dependsOn 'buildApplicationMacos'
@@ -132,7 +172,7 @@ task buildExeLinux(type: Task) {
     }
 }
 
-task buildExeMWindows(type: Task) {
+task buildExeWindows(type: Task) {
     description 'Builds the executable for Windows.'
     group 'build'
     doLast {
