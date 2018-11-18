@@ -22,7 +22,7 @@ const (
 
 	none          section = ""
 	appSettings   section = "settings"
-	appWatchPaths section = "watch_paths"
+	appWatchPaths section = "game_collections"
 
 	launcherExePath     key = "exe_path"
 	launcherDefaultArgs key = "default_args"
