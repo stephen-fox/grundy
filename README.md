@@ -132,7 +132,7 @@ like this:
 'C:\Users\Me\Documents\My Games\gamecube-games' = dolphin
 ```
 
-#### 4. Reload Steam
+#### 6. Reload Steam
 Unfortunately, Steam needs to be restarted to learn about new shortcuts.
 Once you have restarted Steam, you will see your new shind shortcuts.
 
