@@ -99,15 +99,40 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 		}
 
 		config := steamw.NewShortcutConfig{
-			Game:     game,
-			Launcher: launcher,
-			Info:     dataInfo,
+			Name:          game.Name(),
+			LaunchOptions: createSteamLaunchOptions(game, launcher),
+			ExePath:       launcher.ExePath(),
+			IconPath:      iconPath,
+			Tags:          game.Categories(),
+			Info:          dataInfo,
 		}
 
 		c.gameNamesToResults[game.Name()] = steamw.CreateOrUpdateShortcutPerId(config)
 	}
 
 	return c
+}
+
+func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Launcher) string {
+	var options []string
+
+	if game.ShouldOverrideLauncherArgs() {
+		options = append(options, game.LauncherOverrideArgs())
+	} else {
+		if len(launcher.DefaultArgs()) > 0 {
+			options = append(options, launcher.DefaultArgs())
+		}
+
+		if len(game.AdditionalLauncherArgs()) > 0 {
+			options = append(options, game.AdditionalLauncherArgs())
+		}
+	}
+
+	exePath, _ := game.ExeFullPath(launcher)
+
+	options = append(options, exePath)
+
+	return strings.Join(options, " ")
 }
 
 func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) Deleted {

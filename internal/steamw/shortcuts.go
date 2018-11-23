@@ -1,10 +1,9 @@
 package steamw
 
 import (
-	"errors"
 	"os"
+	"path"
 
-	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/steamutil/locations"
 	"github.com/stephen-fox/steamutil/shortcuts"
 )
@@ -14,9 +13,12 @@ const (
 )
 
 type NewShortcutConfig struct {
-	Game     settings.GameSettings
-	Launcher settings.Launcher
-	Info     DataInfo
+	Name          string
+	LaunchOptions string
+	ExePath       string
+	IconPath      string
+	Tags          []string
+	Info          DataInfo
 }
 
 type DeleteShortcutConfig struct {
@@ -67,50 +69,29 @@ func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
 }
 
 func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
-	var options string
-
-	if config.Game.ShouldOverrideLauncherArgs() {
-		options = config.Game.LauncherOverrideArgs()
-	} else {
-		options = config.Launcher.DefaultArgs() + " " + config.Game.AdditionalLauncherArgs()
-	}
-
-	exePath, exeExists := config.Game.ExeFullPath(config.Launcher)
-	if !exeExists {
-		return shortcuts.Unchanged, errors.New("The game executable does not exist")
-	}
-
-	options = options + " " + exePath
+	startDir := path.Dir(config.ExePath)
 
 	onMatch := func(name string, matched *shortcuts.Shortcut) {
-		matched.StartDir = config.Launcher.ExeDirPath()
-		matched.ExePath = config.Launcher.ExePath()
-		matched.LaunchOptions = options
-		iconPath, exists := config.Game.IconPath()
-		if exists {
-			matched.IconPath = iconPath
-		}
-		matched.Tags = config.Game.Categories()
-	}
-
-	iconPath, iconExists := config.Game.IconPath()
-	if !iconExists {
-		iconPath = ""
+		matched.StartDir = startDir
+		matched.ExePath = config.ExePath
+		matched.LaunchOptions = config.LaunchOptions
+		matched.IconPath = config.IconPath
+		matched.Tags = config.Tags
 	}
 
 	noMatch := func(name string) shortcuts.Shortcut {
 		return shortcuts.Shortcut{
-			AppName:       config.Game.Name(),
-			ExePath:       config.Launcher.ExePath(),
-			StartDir:      config.Launcher.ExeDirPath(),
-			IconPath:      iconPath,
-			LaunchOptions: options,
-			Tags:          config.Game.Categories(),
+			AppName:       config.Name,
+			ExePath:       config.ExePath,
+			StartDir:      startDir,
+			IconPath:      config.IconPath,
+			LaunchOptions: config.LaunchOptions,
+			Tags:          config.Tags,
 		}
 	}
 
 	createOrUpdateConfig := shortcuts.CreateOrUpdateConfig{
-		MatchName: config.Game.Name(),
+		MatchName: config.Name,
 		Path:      shortcutsFilePath,
 		Mode:      defaultShortcutsFileMode,
 		OnMatch:   onMatch,
