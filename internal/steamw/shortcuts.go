@@ -75,8 +75,8 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 		options = config.Launcher.DefaultArgs() + " " + config.Game.AdditionalLauncherArgs()
 	}
 
-	exePath, exists := config.Game.ExePath()
-	if !exists {
+	exePath, exeExists := config.Game.ExeFullPath(config.Launcher)
+	if !exeExists {
 		return shortcuts.Unchanged, errors.New("The game executable does not exist")
 	}
 
@@ -86,8 +86,16 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 		matched.StartDir = config.Launcher.ExeDirPath()
 		matched.ExePath = config.Launcher.ExePath()
 		matched.LaunchOptions = options
-		matched.IconPath = config.Game.IconPath()
+		iconPath, exists := config.Game.IconPath()
+		if exists {
+			matched.IconPath = iconPath
+		}
 		matched.Tags = config.Game.Categories()
+	}
+
+	iconPath, iconExists := config.Game.IconPath()
+	if !iconExists {
+		iconPath = ""
 	}
 
 	noMatch := func(name string) shortcuts.Shortcut {
@@ -95,7 +103,7 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 			AppName:       config.Game.Name(),
 			ExePath:       config.Launcher.ExePath(),
 			StartDir:      config.Launcher.ExeDirPath(),
-			IconPath:      config.Game.IconPath(),
+			IconPath:      iconPath,
 			LaunchOptions: options,
 			Tags:          config.Game.Categories(),
 		}

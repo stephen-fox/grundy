@@ -66,7 +66,7 @@ func (o *application) Stop() error {
 type primarySettings struct {
 	dirPath       string
 	watcher       watcher.Watcher
-	watcherConfig watcher.Config
+	configChanges chan watcher.Change
 	app           settings.AppSettings
 	launchers     settings.LaunchersSettings
 	knownGames    settings.KnownGamesSettings
@@ -174,7 +174,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	launchers := settings.NewLaunchersSettings()
 	launchers.AddOrUpdate(settings.NewLauncher())
 	app := settings.NewAppSettings()
-	exampleGame := settings.NewGameSettings()
+	exampleGame := settings.NewGameSettings("").Example()
 
 	saveableToShouldCreateInSettingsDir := map[settings.SaveableSettings]bool{
 		launchers:   true,
@@ -183,7 +183,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	}
 
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
-		err := settings.Create(settingsDirPath + "/examples", settings.ExampleSuffix, s)
+		err := settings.Create(settingsDirPath + "/examples", settings.ExampleSuffix, s.Example())
 		if err != nil {
 			return &primarySettings{}, errors.New("Failed to create example application settings file - " + err.Error())
 		}
@@ -213,10 +213,10 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	}
 
 	primarySettingsWatcherConfig := watcher.Config{
-		ScanFunc:    watcher.ScanFilesInDirectory,
-		RootDirPath: settingsDirPath,
-		FileSuffix:  settings.FileExtension,
-		Changes:     make(chan watcher.Changes),
+		ScanFunc:     watcher.ScanFilesInDirectory,
+		RootDirPath:  settingsDirPath,
+		FileSuffixes: []string{settings.FileExtension},
+		Changes:      make(chan watcher.Change),
 	}
 
 	primarySettingsWatcher, err := watcher.NewWatcher(primarySettingsWatcherConfig)
@@ -226,7 +226,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 
 	return &primarySettings{
 		dirPath:       settingsDirPath,
-		watcherConfig: primarySettingsWatcherConfig,
+		configChanges: primarySettingsWatcherConfig.Changes,
 		watcher:       primarySettingsWatcher,
 		app:           app,
 		launchers:     launchers,
@@ -234,16 +234,16 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	}, nil
 }
 
+// TODO: Maybe move this into 'shortman'?
 func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
-	var targets []string
-
-	m := knownGames.RemoveNonExistingConfigs()
-
-	if len(m) == 0 {
+	gameDirPathsToGameNames := knownGames.DisownNonExistingGames()
+	if len(gameDirPathsToGameNames) == 0 {
 		return nil
 	}
 
-	for _, gameName := range m {
+	var targets []string
+
+	for _, gameName := range gameDirPathsToGameNames {
 		targets = append(targets, gameName)
 	}
 
@@ -264,7 +264,7 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 	}
 
 	for id, notDeleted := range result.IdsToNotDeletedGames {
-		log.Println("Deleted shortcut for", notDeleted, "does not exist for Steam ID", id)
+		log.Println("Shortcut for", notDeleted, "does not exist for Steam ID", id)
 	}
 
 	for id, err := range result.IdsToFailures {
@@ -277,10 +277,11 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 	primary.watcher.Start()
 
-	gameCollectionChanges := make(chan watcher.Changes)
+	gameCollectionChanges := make(chan watcher.Change)
 	dirPathsToWatchers  := make(map[string]watcher.Watcher)
 
 	shortcutManagerConfig := shortman.Config{
+		App:              primary.app,
 		KnownGames:       primary.knownGames,
 		Launchers:        primary.launchers,
 		IgnorePathPrefix: primary.dirPath,
@@ -296,8 +297,12 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 
 	for {
 		select {
-		case change := <-primary.watcherConfig.Changes:
-			processPrimarySettingsChange(change.UpdatedFilePaths, primary, refreshShortcutsTimer, updateWatchersTimer)
+		case configChange := <-primary.configChanges:
+			if configChange.IsErr() {
+				continue
+			}
+
+			processPrimarySettingsChange(configChange.UpdatedFilePaths(), primary, refreshShortcutsTimer, updateWatchersTimer)
 		case <-updateWatchersTimer.C:
 			log.Println("Updating game collection watchers...")
 
@@ -305,30 +310,41 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 		case <-refreshShortcutsTimer.C:
 			log.Println("Refreshing shortcuts for known games...")
 
-			result, err := shortcutManager.RefreshAllShortcuts()
+			steamDataInfo, err := steamw.NewSteamDataInfo()
+			if err != nil {
+				log.Println("Failed to get Steam info - " + err.Error())
+				continue
+			}
+
+			createdUpdated, deleted := shortcutManager.RefreshAll(steamDataInfo)
 			if err != nil {
 				log.Println("An error occurred when refreshing shortcuts for all games - " + err.Error())
 				continue
 			}
 
-			logShortcutManagerResult(result)
-		case change := <-gameCollectionChanges:
-			if change.IsErr() {
-				log.Println("Failed to get changes for game collection - " + change.Err.Error())
+			logShortcutManagerCreatedOrUpdated(createdUpdated)
+			logShortcutManagerDeleted(deleted)
+		case collectionChange := <-gameCollectionChanges:
+			if collectionChange.IsErr() {
+				log.Println("Failed to get changes for game collection - " + collectionChange.ErrDetails())
+
+				// TODO: Delete all shortcuts if the collection no longer exists?
 				continue
 			}
 
-			result, err := shortcutManager.UpdateShortcuts(change.UpdatedFilePaths, change.DeletedFilePaths)
+			steamDataInfo, err := steamw.NewSteamDataInfo()
 			if err != nil {
-				log.Println("Failed to create or update shortcuts - " + err.Error())
+				log.Println("Failed to get Steam info - " + err.Error())
 				continue
 			}
 
-			logShortcutManagerResult(result)
+			createdUpdated := shortcutManager.Update(collectionChange.UpdatedFilePaths(), false, steamDataInfo)
 
-			if result.Created.IsErr() || result.Deleted.IsErr() {
-				// TODO: Do something?
-			}
+			deleted := shortcutManager.Delete(collectionChange.DeletedFilePaths(), false, steamDataInfo)
+
+			logShortcutManagerCreatedOrUpdated(createdUpdated)
+
+			logShortcutManagerDeleted(deleted)
 		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
@@ -345,7 +361,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 	}
 }
 
-func processPrimarySettingsChange(updatedPaths []string, primary *primarySettings, refresh *time.Timer, updateWatchers *time.Timer) {
+func processPrimarySettingsChange(updatedPaths []string, primary *primarySettings, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
 	timerDelay := 5 * time.Second
 
 	for _, filePath := range updatedPaths {
@@ -368,8 +384,11 @@ func processPrimarySettingsChange(updatedPaths []string, primary *primarySetting
 				continue
 			}
 
-			stopTimerSafely(refresh)
-			refresh.Reset(timerDelay)
+			stopTimerSafely(updateWatchers)
+			updateWatchers.Reset(timerDelay)
+
+			stopTimerSafely(refreshShortcuts)
+			refreshShortcuts.Reset(timerDelay)
 		default:
 			continue
 		}
@@ -385,12 +404,13 @@ func stopTimerSafely(t *time.Timer) {
 	}
 }
 
-func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Changes) {
-	watchDirs := primary.app.WatchPaths()
+func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Change) {
+	gameCollectionsToLauncherNames := primary.app.GameCollectionsPathsToLauncherNames()
 
+	// Stop watchers for game collection directories we are no longer watching.
 OUTER:
 	for dirPath, currentWatcher := range dirPathsToWatchers {
-		for _, newDirPath := range watchDirs {
+		for newDirPath := range gameCollectionsToLauncherNames {
 			if dirPath == newDirPath {
 				continue OUTER
 			}
@@ -403,60 +423,95 @@ OUTER:
 		delete(dirPathsToWatchers, dirPath)
 	}
 
-	for _, dirPath := range watchDirs {
-		_, ok := dirPathsToWatchers[dirPath]
-		if ok {
+	// Create and start new game collection watchers.
+	for collectionDirPath, launcherName := range gameCollectionsToLauncherNames {
+		launcher, hasLauncher := primary.launchers.Has(launcherName)
+		if !hasLauncher {
+			log.Println("The collection '" + collectionDirPath + "' will not be added - Launcher '" +
+				launcher.Name() + "' does not exist in the launchers configuration file")
+			continue
+		}
+
+		err := launcher.IsValid()
+		if err != nil {
+			log.Println("The collection '" + collectionDirPath +
+				"' will not be added - The launcher is invalid - " + err.Error())
+			continue
+		}
+
+		w, hasWatcher := dirPathsToWatchers[collectionDirPath]
+		if hasWatcher && areSlicesEqual(w.Config().FileSuffixes, launcher.GameFileSuffixes()) {
 			continue
 		}
 
 		collectionWatcherConfig := watcher.Config{
-			ScanFunc:    watcher.ScanFilesInSubdirectories,
-			RootDirPath: dirPath,
-			FileSuffix:  settings.FileExtension,
-			Changes:     changes,
+			ScanFunc:     watcher.ScanFilesInSubdirectories,
+			RootDirPath:  collectionDirPath,
+			FileSuffixes: launcher.GameFileSuffixes(),
+			Changes:      changes,
 		}
 
-		w, err := watcher.NewWatcher(collectionWatcherConfig)
+		w, err = watcher.NewWatcher(collectionWatcherConfig)
 		if err != nil {
 			log.Println("Failed to create game collection watcher for " +
-				dirPath + " - " + err.Error())
+				collectionDirPath + " - " + err.Error())
 			continue
 		}
 
-		log.Println("Now watching subdirectories in", dirPath)
+		log.Println("Now watching '" + collectionDirPath +"' as a game collection")
 
 		w.Start()
 
-		dirPathsToWatchers[dirPath] = w
+		dirPathsToWatchers[collectionDirPath] = w
 	}
 }
 
-func logShortcutManagerResult(result shortman.ManageResult) {
-	for _, s := range result.Created.CreatedInfo() {
+func areSlicesEqual(a[]string , b []string) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func logShortcutManagerCreatedOrUpdated(result shortman.CreatedOrUpdated) {
+	for _, s := range result.CreatedInfo() {
 		log.Println(s)
 	}
 
-	for _, s := range result.Created.NotAddedInfo() {
+	for _, s := range result.NotAddedInfo() {
 		log.Println(s)
 	}
 
-	for _, s := range result.Created.UpdatedInfo() {
+	for _, s := range result.UpdatedInfo() {
 		log.Println(s)
 	}
 
-	for _, s := range result.Created.FailuresInfo() {
+	for _, s := range result.FailuresInfo() {
+		log.Println(s)
+	}
+}
+
+func logShortcutManagerDeleted(result shortman.Deleted) {
+	for _, s := range result.DeletedInfo() {
 		log.Println(s)
 	}
 
-	for _, s := range result.Deleted.DeletedInfo() {
+	for _, s := range result.NotDeletedInfo() {
 		log.Println(s)
 	}
 
-	for _, s := range result.Deleted.NotDeletedInfo() {
-		log.Println(s)
-	}
-
-	for _, s := range result.Deleted.NotDeletedInfo() {
+	for _, s := range result.FailedToDeleteInfo() {
 		log.Println(s)
 	}
 }

@@ -13,6 +13,7 @@ type CreatedOrUpdated struct {
 	gameNamesToResults    map[string]steamw.NewShortcutResult
 	configPathsToLoadErrs map[string]error
 	notAddedToReasons     map[string]string
+	missingIcons          map[string]string
 }
 
 func (o *CreatedOrUpdated) CreatedInfo() []string {
@@ -69,7 +70,6 @@ func (o *CreatedOrUpdated) FailuresInfo() []string {
 
 	return s
 }
-
 
 func (o *CreatedOrUpdated) IsErr() bool {
 	if len(o.configPathsToLoadErrs) > 0 {

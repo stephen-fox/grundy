@@ -1,7 +1,9 @@
 package shortman
 
 import (
+	"errors"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/stephen-fox/grundy/internal/settings"
@@ -9,56 +11,122 @@ import (
 )
 
 type ShortcutManager interface {
-	UpdateShortcuts(updatedConfigs []string, deletedConfigs []string) (ManageResult, error)
-	RefreshAllShortcuts() (ManageResult, error)
+	RefreshAll(steamDataInfo steamw.DataInfo) (CreatedOrUpdated, Deleted)
+	Update(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) CreatedOrUpdated
+	Delete(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) Deleted
 }
 
 type defaultShortcutManager struct {
 	config Config
 }
 
-func (o *defaultShortcutManager) RefreshAllShortcuts() (ManageResult, error) {
-	var deletedFilePaths []string
-	var existingFilePaths []string
+func (o *defaultShortcutManager) RefreshAll(steamDataInfo steamw.DataInfo) (CreatedOrUpdated, Deleted) {
+	var deletedDirPaths []string
+	var existingDirPaths []string
 
-	for filePath := range o.config.KnownGames.ConfigFilePathsToGameNames() {
-		_, statErr := os.Stat(filePath)
+	for dirPath := range o.config.KnownGames.GameDirPathsToGameNames() {
+		info, statErr := os.Stat(dirPath)
 		if statErr != nil {
-			deletedFilePaths = append(deletedFilePaths, filePath)
+			deletedDirPaths = append(deletedDirPaths, dirPath)
+		} else if info.IsDir() {
+			existingDirPaths = append(existingDirPaths, dirPath)
 		} else {
-			existingFilePaths = append(existingFilePaths, filePath)
+			deletedDirPaths = append(deletedDirPaths, dirPath)
 		}
 	}
 
-	return o.UpdateShortcuts(existingFilePaths, deletedFilePaths)
+	c := o.Update(existingDirPaths, true, steamDataInfo)
+
+	d := o.Delete(deletedDirPaths, true, steamDataInfo)
+
+	return c, d
 }
 
-
-func (o *defaultShortcutManager) UpdateShortcuts(updatedConfigs []string, deletedConfigs []string) (ManageResult, error) {
-	info, err := steamw.NewSteamDataInfo()
-	if err != nil {
-		return ManageResult{}, err
+func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) CreatedOrUpdated {
+	c := CreatedOrUpdated{
+		gameNamesToResults:    make(map[string]steamw.NewShortcutResult),
+		configPathsToLoadErrs: make(map[string]error),
+		notAddedToReasons:     make(map[string]string),
+		missingIcons:          make(map[string]string),
 	}
 
-	return ManageResult{
-		Deleted: o.deleteShortcuts(deletedConfigs, info),
-		Created: o.createOrUpdateShortcuts(updatedConfigs, info),
-	}, nil
-}
-
-func (o *defaultShortcutManager) deleteShortcuts(filePaths []string, info steamw.DataInfo) Deleted {
-	var d Deleted
-
-	for _, deleted := range filePaths {
-		if strings.HasPrefix(deleted, o.config.IgnorePathPrefix) {
+	for _, gameDir := range gamePaths {
+		if strings.HasPrefix(gameDir, o.config.IgnorePathPrefix) {
 			continue
 		}
 
-		gameName, ok := o.config.KnownGames.Remove(deleted)
+		if !isDirs {
+			gameDir = path.Dir(gameDir)
+		}
+
+		launcherName, hasGameCollection := o.config.App.HasGameCollection(path.Dir(gameDir))
+		if !hasGameCollection {
+			c.notAddedToReasons[gameDir] = "Game collection does not exist"
+			continue
+		}
+
+		launcher, hasLauncher := o.config.Launchers.Has(launcherName)
+		if !hasLauncher {
+			c.notAddedToReasons[gameDir] = "The specified launcher does not " +
+				"exist in the launchers settings - '" + launcherName + "'"
+			continue
+		}
+
+		game := settings.NewGameSettings(gameDir)
+		var err error
+		if strings.HasSuffix(gameDir, settings.FileExtension) {
+			game, err = settings.LoadGameSettings(gameDir, launcher)
+		} else {
+			exeFilePath, exeExists := game.ExeFullPath(launcher)
+			if !exeExists {
+				err = errors.New("The executable does not exist - '" + exeFilePath + "'")
+			}
+		}
+		if err != nil {
+			c.configPathsToLoadErrs[gameDir] = err
+			continue
+		}
+
+		added := o.config.KnownGames.AddUniqueGameOnly(game, gameDir)
+		if !added {
+			c.notAddedToReasons[gameDir] = "The game '" + game.Name() + "' already exists"
+			continue
+		}
+
+		iconPath, iconExists := game.IconPath()
+		if !iconExists {
+			c.missingIcons[gameDir] = "Icon does not exist at - '" + iconPath + "'"
+		}
+
+		config := steamw.NewShortcutConfig{
+			Game:     game,
+			Launcher: launcher,
+			Info:     dataInfo,
+		}
+
+		c.gameNamesToResults[game.Name()] = steamw.CreateOrUpdateShortcutPerId(config)
+	}
+
+	return c
+}
+
+func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) Deleted {
+	var d Deleted
+
+	for _, p := range gamePaths {
+		if strings.HasPrefix(p, o.config.IgnorePathPrefix) {
+			continue
+		}
+
+		if !isDirs {
+			p = path.Dir(p)
+		}
+
+		gameName, ok := o.config.KnownGames.Disown(p)
 		if ok {
 			config := steamw.DeleteShortcutConfig{
 				GameNames: []string{gameName},
-				Info:      info,
+				Info:      dataInfo,
 			}
 
 			d.results = append(d.results, steamw.DeleteShortcutPerId(config))
@@ -68,50 +136,8 @@ func (o *defaultShortcutManager) deleteShortcuts(filePaths []string, info steamw
 	return d
 }
 
-func (o *defaultShortcutManager) createOrUpdateShortcuts(filePaths []string, info steamw.DataInfo) CreatedOrUpdated {
-	c := CreatedOrUpdated{
-		gameNamesToResults:    make(map[string]steamw.NewShortcutResult),
-		configPathsToLoadErrs: make(map[string]error),
-		notAddedToReasons:     make(map[string]string),
-	}
-
-	for _, updated := range filePaths {
-		if strings.HasPrefix(updated, o.config.IgnorePathPrefix) {
-			continue
-		}
-
-		game, err := settings.LoadGameSettings(updated)
-		if err != nil {
-			c.configPathsToLoadErrs[updated] = err
-			continue
-		}
-
-		l, ok := o.config.Launchers.Has(game.Launcher())
-		if !ok {
-			c.notAddedToReasons[updated] = "The specified launcher does not " +
-				"exist in the launchers settings - '" + game.Launcher() + "'"
-			continue
-		}
-
-		ok = o.config.KnownGames.AddUniqueGameOnly(game, updated)
-		if !ok {
-			c.notAddedToReasons[updated] = "The game '" + game.Name() + "' already exists"
-			continue
-		}
-
-		config := steamw.NewShortcutConfig{
-			Game:     game,
-			Launcher: l,
-			Info:     info,
-		}
-
-		c.gameNamesToResults[game.Name()] = steamw.CreateOrUpdateShortcutPerId(config)
-	}
-
-	return c
-}
-
 type Config struct {
+	App              settings.AppSettings
 	KnownGames       settings.KnownGamesSettings
 	Launchers        settings.LaunchersSettings
 	IgnorePathPrefix string
