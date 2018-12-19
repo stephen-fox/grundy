@@ -44,7 +44,7 @@ type application struct {
 }
 
 func (o *application) Start() error {
-	log.Println("Starting...")
+	logInfo("Starting...")
 
 	go mainLoop(o.primary, o.stop)
 
@@ -52,13 +52,13 @@ func (o *application) Start() error {
 }
 
 func (o *application) Stop() error {
-	log.Println("Stopping...")
+	logInfo("Stopping...")
 
 	c := make(chan struct{})
 	o.stop <- c
 	<-c
 
-	log.Println("Finished stopping resources")
+	logInfo("Finished stopping resources")
 
 	return nil
 }
@@ -92,18 +92,18 @@ func main() {
 
 	daemonConfig, err := cyberdaemon.GetConfig(daemonId, description)
 	if err != nil {
-		log.Fatal("Failed to create daemon config - " + err.Error())
+		logFatal("Failed to create daemon config - " + err.Error())
 	}
 
 	daemon, err := cyberdaemon.NewDaemon(daemonConfig)
 	if err != nil {
-		log.Fatal("Failed to create daemon - " + err.Error())
+		logFatal("Failed to create daemon - " + err.Error())
 	}
 
 	if *doInstall {
 		err := installer.Install(daemon)
 		if err != nil {
-			log.Fatal(err.Error())
+			logFatal(err.Error())
 		}
 
 		os.Exit(0)
@@ -112,22 +112,22 @@ func main() {
 	if *doUninstall {
 		err := installer.Uninstall(daemon)
 		if err != nil {
-			log.Fatal(err.Error())
+			logFatal(err.Error())
 		}
 
 		os.Exit(0)
 	}
 
 	if len(strings.TrimSpace(*daemonCommand)) > 0 {
-		log.Println("Executing daemon command '" + *daemonCommand + "'...")
+		logInfo("Executing daemon command '" + *daemonCommand + "'...")
 
 		output, err := daemon.ExecuteCommand(cyberdaemon.Command(*daemonCommand))
 		if err != nil {
-			log.Fatal(err.Error())
+			logFatal(err.Error())
 		}
 
 		if len(output) > 0 {
-			log.Println(output)
+			logInfo(output)
 		}
 
 		os.Exit(0)
@@ -136,19 +136,19 @@ func main() {
 	instanceLock := lock.NewLock(settings.InternalFilesDir(*appSettingsDirPath))
 	err = instanceLock.Acquire()
 	if err != nil {
-		log.Fatal(err.Error())
+		logFatal(err.Error())
 	}
 	defer instanceLock.Release()
 
 	go func() {
 		for err := range instanceLock.Errs() {
-			log.Println("Error maintaining instance lock - " + err.Error())
+			logError("Error maintaining instance lock - " + err.Error())
 		}
 	}()
 
 	logFile, err := settings.LogFile(*appSettingsDirPath)
 	if err != nil {
-		log.Fatal(err.Error())
+		logFatal(err.Error())
 	}
 	defer logFile.Close()
 
@@ -156,7 +156,7 @@ func main() {
 
 	primary, err := setupPrimarySettings(*appSettingsDirPath)
 	if err != nil {
-		log.Fatal(err.Error())
+		logFatal(err.Error())
 	}
 
 	app := &application{
@@ -166,7 +166,7 @@ func main() {
 
 	err = daemon.BlockAndRun(app)
 	if err != nil {
-		log.Fatal(err.Error())
+		logFatal(err.Error())
 	}
 }
 
@@ -208,7 +208,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	if loaded {
 		err := cleanupKnownGameShortcuts(knownGames)
 		if err != nil {
-			log.Println("Failed to cleanup known game shortcuts -", err.Error())
+			logError("Failed to cleanup known game shortcuts -", err.Error())
 		}
 	}
 
@@ -260,15 +260,15 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 	result := steamw.DeleteShortcutPerId(config)
 
 	for id, deleted := range result.IdsToDeletedGames {
-		log.Println("Deleted shortcut for", deleted, "for Steam ID", id)
+		logInfo("Deleted shortcut for", deleted, "for Steam ID", id)
 	}
 
 	for id, notDeleted := range result.IdsToNotDeletedGames {
-		log.Println("Shortcut for", notDeleted, "does not exist for Steam ID", id)
+		logWarn("Shortcut for", notDeleted, "does not exist for Steam ID", id)
 	}
 
 	for id, err := range result.IdsToFailures {
-		log.Println("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
+		logError("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
 	}
 
 	return nil
@@ -304,21 +304,21 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 
 			processPrimarySettingsChange(configChange.UpdatedFilePaths(), primary, refreshShortcutsTimer, updateWatchersTimer)
 		case <-updateWatchersTimer.C:
-			log.Println("Updating game collection watchers...")
+			logInfo("Updating game collection watchers...")
 
 			updateGameCollectionWatchers(primary, dirPathsToWatchers, gameCollectionChanges)
 		case <-refreshShortcutsTimer.C:
-			log.Println("Refreshing shortcuts for known games...")
+			logInfo("Refreshing shortcuts for known games...")
 
 			steamDataInfo, err := steamw.NewSteamDataInfo()
 			if err != nil {
-				log.Println("Failed to get Steam info - " + err.Error())
+				logError("Failed to get Steam info - " + err.Error())
 				continue
 			}
 
 			createdUpdated, deleted := shortcutManager.RefreshAll(steamDataInfo)
 			if err != nil {
-				log.Println("An error occurred when refreshing shortcuts for all games - " + err.Error())
+				logError("An error occurred when refreshing shortcuts for all games - " + err.Error())
 				continue
 			}
 
@@ -326,7 +326,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			logShortcutManagerDeleted(deleted)
 		case collectionChange := <-gameCollectionChanges:
 			if collectionChange.IsErr() {
-				log.Println("Failed to get changes for game collection - " + collectionChange.ErrDetails())
+				logError("Failed to get changes for game collection - " + collectionChange.ErrDetails())
 
 				// TODO: Delete all shortcuts if the collection no longer exists?
 				continue
@@ -334,7 +334,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 
 			steamDataInfo, err := steamw.NewSteamDataInfo()
 			if err != nil {
-				log.Println("Failed to get Steam info - " + err.Error())
+				logError("Failed to get Steam info - " + err.Error())
 				continue
 			}
 
@@ -376,13 +376,13 @@ func processPrimarySettingsChange(updatedPaths []string, primary *primarySetting
 	timerDelay := 5 * time.Second
 
 	for _, filePath := range updatedPaths {
-		log.Println("Main settings file has been updated:", filePath)
+		logInfo("Main settings file has been updated:", filePath)
 
 		switch path.Base(filePath) {
 		case primary.app.Filename(""):
 			err := primary.app.Reload(filePath)
 			if err != nil {
-				log.Println("Failed to load application settings -", err.Error())
+				logError("Failed to load application settings -", err.Error())
 				continue
 			}
 
@@ -391,7 +391,7 @@ func processPrimarySettingsChange(updatedPaths []string, primary *primarySetting
 		case primary.launchers.Filename(""):
 			err := primary.launchers.Reload(filePath)
 			if err != nil {
-				log.Println("Failed to load launchers settings -", err.Error())
+				logError("Failed to load launchers settings -", err.Error())
 				continue
 			}
 
@@ -427,7 +427,7 @@ OUTER:
 			}
 		}
 
-		log.Println("No longer watching", dirPath)
+		logInfo("No longer watching", dirPath)
 
 		currentWatcher.Stop()
 
@@ -438,14 +438,14 @@ OUTER:
 	for collectionDirPath, launcherName := range gameCollectionsToLauncherNames {
 		launcher, hasLauncher := primary.launchers.Has(launcherName)
 		if !hasLauncher {
-			log.Println("The collection '" + collectionDirPath + "' will not be added - Launcher '" +
+			logError("The collection '" + collectionDirPath + "' will not be added - Launcher '" +
 				launcher.Name() + "' does not exist in the launchers configuration file")
 			continue
 		}
 
 		err := launcher.IsValid()
 		if err != nil {
-			log.Println("The collection '" + collectionDirPath +
+			logError("The collection '" + collectionDirPath +
 				"' will not be added - The launcher is invalid - " + err.Error())
 			continue
 		}
@@ -464,12 +464,12 @@ OUTER:
 
 		w, err = watcher.NewWatcher(collectionWatcherConfig)
 		if err != nil {
-			log.Println("Failed to create game collection watcher for " +
+			logError("Failed to create game collection watcher for " +
 				collectionDirPath + " - " + err.Error())
 			continue
 		}
 
-		log.Println("Now watching '" + collectionDirPath +"' as a game collection")
+		logInfo("Now watching '" + collectionDirPath +"' as a game collection")
 
 		w.Start()
 
@@ -544,4 +544,9 @@ func logInfo(v ...interface{}) {
 func logWarn(v ...interface{}) {
 	v = append([]interface{}{"[WARN]"}, v...)
 	log.Println(v...)
+}
+
+func logFatal(v ...interface{}) {
+	v = append([]interface{}{"[FATAL]"}, v...)
+	log.Fatal(v...)
 }
