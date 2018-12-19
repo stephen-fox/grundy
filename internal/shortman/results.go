@@ -13,6 +13,7 @@ type CreatedOrUpdated struct {
 	gameNamesToResults    map[string]steamw.NewShortcutResult
 	configPathsToLoadErrs map[string]error
 	notAddedToReasons     map[string]string
+	missingIcons          map[string]string
 }
 
 func (o *CreatedOrUpdated) CreatedInfo() []string {
@@ -70,7 +71,6 @@ func (o *CreatedOrUpdated) FailuresInfo() []string {
 	return s
 }
 
-
 func (o *CreatedOrUpdated) IsErr() bool {
 	if len(o.configPathsToLoadErrs) > 0 {
 		return true
@@ -85,8 +85,19 @@ func (o *CreatedOrUpdated) IsErr() bool {
 	return false
 }
 
+func (o *CreatedOrUpdated) MissingIconsInfo() []string {
+	var s []string
+
+	for name := range o.missingIcons {
+		s = append(s, "Game '" + name + "' is missing an icon")
+	}
+
+	return s
+}
+
 type Deleted struct {
-	results []steamw.DeletedShortcutsForSteamIdsResult
+	results                  []steamw.DeletedShortcutsForSteamIdsResult
+	stillHasExecutableToPath map[string]string
 }
 
 func (o *Deleted) DeletedInfo() []string {
@@ -109,9 +120,14 @@ func (o *Deleted) NotDeletedInfo() []string {
 	for _, r := range o.results {
 		for steamId, gameNames := range r.IdsToNotDeletedGames {
 			for _, name := range gameNames {
-				s = append(s, "Shortcut for "+name+" was not deleted for Steam ID "+steamId)
+				s = append(s, "Shortcut for " + name + " was not deleted for Steam ID " + steamId)
 			}
 		}
+	}
+
+	for name, exePath := range o.stillHasExecutableToPath {
+		s = append(s, "Shortcut for " + name + " was not deleted because it still has an executable at '" +
+			exePath + "'")
 	}
 
 	return s
@@ -122,7 +138,7 @@ func (o *Deleted) FailedToDeleteInfo() []string {
 
 	for _, r := range o.results {
 		for steamId, err := range r.IdsToFailures {
-			s = append(s, "Failed to delete shortcut for Steam ID "+steamId+" - "+err.Error())
+			s = append(s, "Failed to delete shortcut for Steam ID " + steamId + " - " + err.Error())
 		}
 	}
 
