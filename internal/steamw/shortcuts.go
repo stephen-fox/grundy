@@ -79,7 +79,7 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 		matched.Tags = config.Tags
 	}
 
-	noMatch := func(name string) shortcuts.Shortcut {
+	noMatch := func(name string) (shortcuts.Shortcut, bool) {
 		return shortcuts.Shortcut{
 			AppName:       config.Name,
 			ExePath:       config.ExePath,
@@ -87,7 +87,7 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 			IconPath:      config.IconPath,
 			LaunchOptions: config.LaunchOptions,
 			Tags:          config.Tags,
-		}
+		}, false
 	}
 
 	createOrUpdateConfig := shortcuts.CreateOrUpdateConfig{
