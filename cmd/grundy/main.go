@@ -338,13 +338,24 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 				continue
 			}
 
-			createdUpdated := shortcutManager.Update(collectionChange.UpdatedFilePaths(), false, steamDataInfo)
+			// TODO: The following lines determine way too much about game collections'
+			// fates based on game icons. The code should determine game collection
+			// updates and deletions based on game files, rather than icon files.
+			// This code is unintuitive, and might lead to bugs when the business
+			// logic changes.
 
-			deleted := shortcutManager.Delete(collectionChange.DeletedFilePaths(), false, steamDataInfo)
+			updatedFilePaths := collectionChange.UpdatedFilePaths()
+			// If an icon is deleted, add the path to the list
+			// of updated file paths.
+			updatedFilePaths = append(updatedFilePaths,
+				collectionChange.DeletedFilePathsWithSuffixes(settings.GameIconSuffixes)...)
+			createdUpdatedShortcuts := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
+			logShortcutManagerCreatedOrUpdated(createdUpdatedShortcuts)
 
-			logShortcutManagerCreatedOrUpdated(createdUpdated)
-
-			logShortcutManagerDeleted(deleted)
+			// Do not delete game collections if a game icon is deleted.
+			deletedShortcuts := shortcutManager.Delete(collectionChange.DeletedFilePathsWithoutSuffixes(settings.GameIconSuffixes),
+				false, steamDataInfo)
+			logShortcutManagerDeleted(deletedShortcuts)
 		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
@@ -447,7 +458,7 @@ OUTER:
 		collectionWatcherConfig := watcher.Config{
 			ScanFunc:     watcher.ScanFilesInSubdirectories,
 			RootDirPath:  collectionDirPath,
-			FileSuffixes: launcher.GameFileSuffixes(),
+			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameIconSuffixes...),
 			Changes:      changes,
 		}
 
@@ -486,32 +497,51 @@ func areSlicesEqual(a[]string , b []string) bool {
 
 func logShortcutManagerCreatedOrUpdated(result shortman.CreatedOrUpdated) {
 	for _, s := range result.CreatedInfo() {
-		log.Println(s)
+		logInfo(s)
 	}
 
 	for _, s := range result.NotAddedInfo() {
-		log.Println(s)
+		logWarn(s)
 	}
 
 	for _, s := range result.UpdatedInfo() {
-		log.Println(s)
+		logInfo(s)
 	}
 
 	for _, s := range result.FailuresInfo() {
-		log.Println(s)
+		logError(s)
+	}
+
+	for _, s := range result.MissingIconsInfo() {
+		logWarn(s)
 	}
 }
 
 func logShortcutManagerDeleted(result shortman.Deleted) {
 	for _, s := range result.DeletedInfo() {
-		log.Println(s)
+		logInfo(s)
 	}
 
 	for _, s := range result.NotDeletedInfo() {
-		log.Println(s)
+		logWarn(s)
 	}
 
 	for _, s := range result.FailedToDeleteInfo() {
-		log.Println(s)
+		logError(s)
 	}
+}
+
+func logError(v ...interface{}) {
+	v = append([]interface{}{"[ERROR]"}, v...)
+	log.Println(v...)
+}
+
+func logInfo(v ...interface{}) {
+	v = append([]interface{}{"[INFO]"}, v...)
+	log.Println(v...)
+}
+
+func logWarn(v ...interface{}) {
+	v = append([]interface{}{"[WARN]"}, v...)
+	log.Println(v...)
 }

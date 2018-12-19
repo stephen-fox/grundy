@@ -136,7 +136,9 @@ func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Laun
 }
 
 func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) Deleted {
-	var d Deleted
+	d := Deleted{
+		stillHasExecutableToPath: make(map[string]string),
+	}
 
 	for _, p := range gamePaths {
 		if strings.HasPrefix(p, o.config.IgnorePathPrefix) {
@@ -145,6 +147,20 @@ func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInf
 
 		if !isDirs {
 			p = path.Dir(p)
+		}
+
+		// Do not delete if there is an executable in the directory.
+		launcherName, hasCollection := o.config.App.HasGameCollection(p)
+		if hasCollection {
+			launcher, hasLauncher := o.config.Launchers.Has(launcherName)
+			if hasLauncher {
+				game := settings.NewGameSettings(p)
+				exePath, exeExists := game.ExeFullPath(launcher)
+				if exeExists {
+					d.stillHasExecutableToPath[p] = exePath
+					continue
+				}
+			}
 		}
 
 		gameName, ok := o.config.KnownGames.Disown(p)
