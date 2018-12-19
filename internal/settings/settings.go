@@ -40,7 +40,7 @@ const (
 )
 
 var (
-	iconSuffixes = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
+	GameIconSuffixes = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
 )
 
 type section string
@@ -461,8 +461,8 @@ func (o *defaultGameSettings) IconPath() (string, bool) {
 
 func (o *defaultGameSettings) defaultIconPath() (string, bool) {
 	iconFunc := func(filename string) bool {
-		for i := range iconSuffixes {
-			if strings.HasSuffix(filename, iconSuffixes[i]) {
+		for i := range GameIconSuffixes {
+			if strings.HasSuffix(filename, GameIconSuffixes[i]) {
 				return true
 			}
 		}
