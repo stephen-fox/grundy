@@ -16,8 +16,8 @@ github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c h1:Ho+uVpke
 github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c/go.mod h1:XDJAKZRPZ1CvBcN2aX5YOUTYGHki24fSF0Iv48Ibg0s=
 github.com/stephen-fox/launchctlutil v1.0.0 h1:R4JjKn+d1KS9gG0J1hZSnliThNC45F45P3eEZAEiBlA=
 github.com/stephen-fox/launchctlutil v1.0.0/go.mod h1:6T2s/vDUsaN+VK51Hyc+4hRC6PMg9U+FxzyhHu3wgXo=
-github.com/stephen-fox/steamutil v0.0.0-20181123161517-ee11c6f61fa4 h1:J8daN8eOt6WzuvDRSsdwTN00hoqgAjUaNu7UksaTLKs=
-github.com/stephen-fox/steamutil v0.0.0-20181123161517-ee11c6f61fa4/go.mod h1:YWJJBD1+KY1LA56ro9IXXlLw6WFDZhzoembd/Hc/8/s=
+github.com/stephen-fox/launchctlutil v1.1.0 h1:rP4476CDy8CQFntHcfxIqHoYLmfK9OP9wOUqq2GCC9o=
+github.com/stephen-fox/launchctlutil v1.1.0/go.mod h1:6T2s/vDUsaN+VK51Hyc+4hRC6PMg9U+FxzyhHu3wgXo=
 github.com/stephen-fox/steamutil v1.0.0 h1:mXI+Mytw/49mijvo3fHWt2FBdT3rBgcoC7bJs0oBATY=
 github.com/stephen-fox/steamutil v1.0.0/go.mod h1:xECd6D2tjqLpD28jNEPkxvOIcYNvTyzxs7Fo39pvnJ4=
 github.com/stephen-fox/watcher v1.0.0 h1:4Q+Yu74taTYSpZuQjmKSGf4U2d3C46Z3OZZZNjbrByo=
