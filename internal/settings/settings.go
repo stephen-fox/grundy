@@ -34,13 +34,16 @@ const (
 	gameAdditionalArgs key = "additional_args"
 	gameIconPath       key = "icon"
 	gameCategories     key = "categories"
+	gameTilePath       key = "tile"
 
 	listSeparator  = ","
 	gameIconPrefix = "-icon"
+	gameTilePrefix = "-tile"
 )
 
 var (
 	GameIconSuffixes = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
+	GameTileSuffixes = []string{gameTilePrefix + ".png", gameTilePrefix + ".jpg"}
 )
 
 type section string
@@ -304,6 +307,8 @@ type GameSettings interface {
 	AdditionalLauncherArgs() string
 	SetIconPath(string)
 	IconPath() (filePath string, exists bool)
+	SetTilePath(string)
+	TilePath() (filePath string, exists bool)
 	AddCategory(string)
 	RemoveCategory(string)
 	SetCategories([]string)
@@ -341,9 +346,11 @@ func (o *defaultGameSettings) Example() SaveableSettings {
 	if runtime.GOOS == "windows" {
 		s.SetExeSubPath("example.exe")
 		s.SetIconPath("C:\\path\\to\\game-icon.png")
+		s.SetTilePath("C:\\path\\to\\game-tile.png")
 	} else {
 		s.SetExeSubPath("example.sh")
 		s.SetIconPath("/path/to/game-icon.png")
+		s.SetTilePath("/path/to/game-tile.png")
 	}
 
 	s.SetCategories([]string{"My Cool Category", "Another Cool Category", "some-other category"})
@@ -438,44 +445,37 @@ func (o *defaultGameSettings) SetIconPath(iconPath string) {
 }
 
 func (o *defaultGameSettings) IconPath() (string, bool) {
-	iconPath := o.config.KeyValue(none, gameIconPath)
+	return o.manualFilePathOrExisting(gameIconPath, GameIconSuffixes)
+}
 
-	if len(strings.TrimSpace(iconPath)) == 0 {
+func (o *defaultGameSettings) SetTilePath(tilePath string) {
+	o.config.AddOrUpdateKeyValue(none, gameTilePath, tilePath)
+}
+
+func (o *defaultGameSettings) TilePath() (string, bool) {
+	return o.manualFilePathOrExisting(gameTilePath, GameTileSuffixes)
+}
+
+func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) (string, bool) {
+	filePath := o.config.KeyValue(none, k)
+
+	if len(strings.TrimSpace(filePath)) == 0 {
 		found := false
-		iconPath, found = o.defaultIconPath()
+		filePath, found = existingFilePath(o.dirPath, suffixes)
 		if !found {
 			return "", false
 		}
 	}
 
 	// TODO: Does this handle Windows disk drives properly?
-	iconPath = filepath.Clean(iconPath)
+	filePath = filepath.Clean(filePath)
 
-	_, statErr := os.Stat(iconPath)
+	_, statErr := os.Stat(filePath)
 	if statErr != nil {
-		return iconPath, false
+		return filePath, false
 	}
 
-	return appendDoubleQuotesIfNeeded(iconPath), true
-}
-
-func (o *defaultGameSettings) defaultIconPath() (string, bool) {
-	iconFunc := func(filename string) bool {
-		for i := range GameIconSuffixes {
-			if strings.HasSuffix(filename, GameIconSuffixes[i]) {
-				return true
-			}
-		}
-
-		return false
-	}
-
-	iconFilePath, found := dirContainsFile(o.dirPath, iconFunc)
-	if found {
-		return iconFilePath, true
-	}
-
-	return "", false
+	return appendDoubleQuotesIfNeeded(filePath), true
 }
 
 func (o *defaultGameSettings) AddCategory(c string) {
@@ -727,6 +727,25 @@ func LoadGameSettings(filePath string, launcher Launcher) (GameSettings, error) 
 	}
 
 	return d, nil
+}
+
+func existingFilePath(dirPath string, suffixes []string) (string, bool) {
+	matchFunc := func(filename string) bool {
+		for i := range suffixes {
+			if strings.HasSuffix(filename, suffixes[i]) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	filePath, found := dirContainsFile(dirPath, matchFunc)
+	if found {
+		return filePath, true
+	}
+
+	return "", false
 }
 
 func dirContainsFile(dirPath string, fileNameMatchFunc func(string) bool) (string, bool) {
