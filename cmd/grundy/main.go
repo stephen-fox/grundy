@@ -547,6 +547,6 @@ func logWarn(v ...interface{}) {
 }
 
 func logFatal(v ...interface{}) {
-	v = append([]interface{}{"[FATAL]"}, v...)
+	v = append([]interface{}{"[FATAL] "}, v...)
 	log.Fatal(v...)
 }
