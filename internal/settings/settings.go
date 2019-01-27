@@ -58,6 +58,30 @@ func (o key) string() string {
 	return string(o)
 }
 
+type DynamicFilePath interface {
+	FilePath() string
+	WasDynamicallySelected() bool
+	FileExists() bool
+}
+
+type defaultDynamicFilePath struct {
+	filePath   string
+	dynamic    bool
+	fileExists bool
+}
+
+func (o defaultDynamicFilePath) FilePath() string {
+	return o.filePath
+}
+
+func (o defaultDynamicFilePath) WasDynamicallySelected() bool {
+	return o.dynamic
+}
+
+func (o defaultDynamicFilePath) FileExists() bool {
+	return o.fileExists
+}
+
 type SaveableSettings interface {
 	Filename(additionalSuffix string) string
 	Reload(filePath string) error
@@ -306,9 +330,9 @@ type GameSettings interface {
 	SetAdditionalLauncherArgs(string)
 	AdditionalLauncherArgs() string
 	SetIconPath(string)
-	IconPath() (filePath string, exists bool)
+	IconPath() DynamicFilePath
 	SetTilePath(string)
-	TilePath() (filePath string, exists bool)
+	TilePath() DynamicFilePath
 	AddCategory(string)
 	RemoveCategory(string)
 	SetCategories([]string)
@@ -444,7 +468,7 @@ func (o *defaultGameSettings) SetIconPath(iconPath string) {
 	o.config.AddOrUpdateKeyValue(none, gameIconPath, iconPath)
 }
 
-func (o *defaultGameSettings) IconPath() (string, bool) {
+func (o *defaultGameSettings) IconPath() DynamicFilePath {
 	return o.manualFilePathOrExisting(gameIconPath, GameIconSuffixes)
 }
 
@@ -452,30 +476,35 @@ func (o *defaultGameSettings) SetTilePath(tilePath string) {
 	o.config.AddOrUpdateKeyValue(none, gameTilePath, tilePath)
 }
 
-func (o *defaultGameSettings) TilePath() (string, bool) {
+func (o *defaultGameSettings) TilePath() DynamicFilePath {
 	return o.manualFilePathOrExisting(gameTilePath, GameTileSuffixes)
 }
 
-func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) (string, bool) {
-	filePath := o.config.KeyValue(none, k)
+func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) DynamicFilePath {
+	result := &defaultDynamicFilePath{
+		filePath: o.config.KeyValue(none, k),
+	}
 
-	if len(strings.TrimSpace(filePath)) == 0 {
-		found := false
-		filePath, found = existingFilePath(o.dirPath, suffixes)
-		if !found {
-			return "", false
+	if len(strings.TrimSpace(result.filePath)) == 0 {
+		result.dynamic = true
+		result.filePath, result.fileExists = existingFilePath(o.dirPath, suffixes)
+		if !result.fileExists {
+			return result
 		}
 	}
 
 	// TODO: Does this handle Windows disk drives properly?
-	filePath = filepath.Clean(filePath)
+	result.filePath = filepath.Clean(result.filePath)
 
-	_, statErr := os.Stat(filePath)
+	_, statErr := os.Stat(result.filePath)
 	if statErr != nil {
-		return filePath, false
+		return result
 	}
 
-	return appendDoubleQuotesIfNeeded(filePath), true
+	result.filePath = appendDoubleQuotesIfNeeded(result.filePath)
+	result.fileExists = true
+
+	return result
 }
 
 func (o *defaultGameSettings) AddCategory(c string) {
@@ -577,6 +606,7 @@ func (o *defaultKnownGamesSettings) AddUniqueGameOnly(game GameSettings, dirPath
 		if gameName == game.Name() {
 			count++
 
+			// TODO: Why did I do this again?
 			if count > 1 {
 				return false
 			}
