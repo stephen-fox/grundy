@@ -339,10 +339,10 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			}
 
 			// TODO: The following lines determine way too much about game collections'
-			// fates based on game icons. The code should determine game collection
-			// updates and deletions based on game files, rather than icon files.
-			// This code is unintuitive, and might lead to bugs when the business
-			// logic changes.
+			//  fates based on game icons. The code should determine game collection
+			//  updates and deletions based on game files, rather than icon files.
+			//  This code is unintuitive, and might lead to bugs when the business
+			//  logic changes.
 
 			updatedFilePaths := collectionChange.UpdatedFilePaths()
 			// If an icon is deleted, add the path to the list
