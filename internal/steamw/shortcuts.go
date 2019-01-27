@@ -136,13 +136,13 @@ func addOrRemoveShortcutTile(config NewShortcutConfig, steamUserId string) error
 		return nil
 	}
 
-	addConfig := grid.AddConfig{
+	gridAddConfig := grid.AddConfig{
 		ImageSourcePath:   config.TilePath,
 		ResultDetails:     tileDetails,
 		OverwriteExisting: true,
 	}
 
-	err := grid.AddImage(addConfig)
+	err := grid.AddImage(gridAddConfig)
 	if err != nil {
 		return err
 	}

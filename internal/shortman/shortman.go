@@ -99,21 +99,21 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 
 		var warnings []string
 
-		iconPath := game.IconPath()
-		if !iconPath.WasDynamicallySelected() && !iconPath.FileExists() {
+		icon := game.IconPath()
+		if !icon.WasDynamicallySelected() && !icon.FileExists() {
 			r = append(r, results.NewUpdateShortcutFailed(gameDir, "manual icon does not exist at - '" +
-				iconPath.FilePath() + "'"))
+				icon.FilePath() + "'"))
 			continue
-		} else if iconPath.WasDynamicallySelected() && !iconPath.FileExists() {
+		} else if icon.WasDynamicallySelected() && !icon.FileExists() {
 			warnings = append(warnings, "no icon was provided")
 		}
 
-		tilePath := game.TilePath()
-		if !tilePath.WasDynamicallySelected() && !tilePath.FileExists() {
+		tile := game.TilePath()
+		if !tile.WasDynamicallySelected() && !tile.FileExists() {
 			r = append(r, results.NewUpdateShortcutFailed(gameDir, "manual tile does not exist at - '" +
-				tilePath.FilePath() + "'"))
+				tile.FilePath() + "'"))
 			continue
-		} else if tilePath.WasDynamicallySelected() && !tilePath.FileExists() {
+		} else if tile.WasDynamicallySelected() && !tile.FileExists() {
 			warnings = append(warnings, "no tile was provided")
 		}
 
@@ -121,8 +121,8 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 			Name:          game.Name(),
 			LaunchOptions: createSteamLaunchOptions(game, launcher),
 			ExePath:       launcher.ExePath(),
-			IconPath:      iconPath.FilePath(),
-			TilePath:      tilePath.FilePath(),
+			IconPath:      icon.FilePath(),
+			TilePath:      tile.FilePath(),
 			Tags:          game.Categories(),
 			Info:          dataInfo,
 			Warnings:      warnings,
