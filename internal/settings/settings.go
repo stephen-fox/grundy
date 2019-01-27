@@ -501,7 +501,6 @@ func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string)
 		return result
 	}
 
-	result.filePath = appendDoubleQuotesIfNeeded(result.filePath)
 	result.fileExists = true
 
 	return result
