@@ -10,7 +10,7 @@ require (
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 	github.com/smartystreets/goconvey v0.0.0-20181108003508-044398e4856c // indirect
 	github.com/stephen-fox/launchctlutil v1.1.0
-	github.com/stephen-fox/steamutil v1.0.0
+	github.com/stephen-fox/steamutil v1.3.0
 	github.com/stephen-fox/watcher v0.0.2
 	gopkg.in/ini.v1 v1.39.3 // indirect
 )

@@ -3,7 +3,10 @@ package steamw
 import (
 	"os"
 	"path"
+	"strings"
 
+	"github.com/stephen-fox/grundy/internal/results"
+	"github.com/stephen-fox/steamutil/grid"
 	"github.com/stephen-fox/steamutil/locations"
 	"github.com/stephen-fox/steamutil/shortcuts"
 )
@@ -17,55 +20,59 @@ type NewShortcutConfig struct {
 	LaunchOptions string
 	ExePath       string
 	IconPath      string
+	TilePath      string
 	Tags          []string
 	Info          DataInfo
+	Warnings      []string
 }
 
 type DeleteShortcutConfig struct {
-	GameNames []string
-	Info      DataInfo
+	SkipTileDelete  bool
+	LauncherExePath string
+	GameName        string
+	Info            DataInfo
 }
 
-type NewShortcutResult struct {
-	CreatedForIds []string
-	UpdatedForIds []string
-	IdsToFailures map[string]error
+type deleteShortcutResult struct {
+	wasDeleted bool
 }
 
-type DeletedShortcutsForSteamIdsResult struct {
-	IdsToDeletedGames map[string][]string
-	IdsToNotDeletedGames map[string][]string
-	IdsToFailures map[string]error
-}
-
-type DeletedShortcutResult struct {
-	Deleted    []string
-	NotDeleted []string
-}
-
-func CreateOrUpdateShortcutPerId(config NewShortcutConfig) NewShortcutResult {
-	result := NewShortcutResult{
-		IdsToFailures: make(map[string]error),
-	}
+func CreateOrUpdateShortcut(config NewShortcutConfig) []results.Result {
+	var r []results.Result
 
 	for steamUserId := range config.Info.IdsToDirPaths {
 		shortcutsPath := locations.ShortcutsFilePath(config.Info.DataLocations.RootDirPath(), steamUserId)
 
 		fileUpdateResult, err := createOrUpdateShortcut(config, shortcutsPath)
 		if err != nil {
-			result.IdsToFailures[steamUserId] = err
+			r = append(r, results.NewUpdateSteamUserShortcutFailed(config.Name, steamUserId, err.Error()))
 			continue
 		}
 
-		switch fileUpdateResult {
-		case shortcuts.UpdatedEntry:
-			result.UpdatedForIds = append(result.UpdatedForIds, steamUserId)
-		default:
-			result.CreatedForIds = append(result.CreatedForIds, steamUserId)
+		err = addOrRemoveShortcutTile(config, steamUserId)
+		if err != nil {
+			r = append(r, results.NewUpdateSteamUserShortcutFailed(config.Name, steamUserId, err.Error()))
+			continue
 		}
+
+		var ur results.Result
+
+		if len(config.Warnings) == 0 {
+			switch fileUpdateResult {
+			case shortcuts.UpdatedEntry:
+				ur = results.NewUpdateShortcutSuccess(config.Name)
+			default:
+				ur = results.NewCreateShortcutSuccess(config.Name)
+			}
+		} else {
+			ur = results.NewCreateShortcutSuccessWithWarnings(config.Name,
+				strings.Join(config.Warnings, ", "))
+		}
+
+		r = append(r, ur)
 	}
 
-	return result
+	return r
 }
 
 func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
@@ -106,83 +113,134 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 	return result, nil
 }
 
-func DeleteShortcutPerId(config DeleteShortcutConfig) DeletedShortcutsForSteamIdsResult {
-	result := DeletedShortcutsForSteamIdsResult{
-		IdsToDeletedGames: make(map[string][]string),
-		IdsToNotDeletedGames: make(map[string][]string),
-		IdsToFailures: make(map[string]error),
+func addOrRemoveShortcutTile(config NewShortcutConfig, steamUserId string) error {
+	tileDetails := grid.ImageDetails{
+		DataVerifier:       config.Info.DataLocations,
+		OwnerUserId:        steamUserId,
+		GameName:           config.Name,
+		GameExecutablePath: config.ExePath,
 	}
+
+	if len(config.TilePath) == 0 {
+		removeConfig := grid.RemoveConfig{
+			TargetDetails: tileDetails,
+		}
+
+		// TODO: Should this return an error? Perhaps the tile
+		//  never existed in the first place?
+		err := grid.RemoveImage(removeConfig)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	addConfig := grid.AddConfig{
+		ImageSourcePath:   config.TilePath,
+		ResultDetails:     tileDetails,
+		OverwriteExisting: true,
+	}
+
+	err := grid.AddImage(addConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeleteShortcut(config DeleteShortcutConfig) []results.Result {
+	var r []results.Result
 
 	for steamUserId := range config.Info.IdsToDirPaths {
 		shortcutsPath := locations.ShortcutsFilePath(config.Info.DataLocations.RootDirPath(), steamUserId)
 
-		delResult, err := deleteShortcuts(config, shortcutsPath)
+		delResult, err := deleteShortcut(config, shortcutsPath)
 		if err != nil {
-			result.IdsToFailures[steamUserId] = err
+			r = append(r, results.NewDeleteSteamUserShortcutFailure(config.GameName, steamUserId, err.Error()))
 			continue
 		}
 
-		if len(delResult.Deleted) > 0 {
-			result.IdsToDeletedGames[steamUserId] = delResult.Deleted
+		if !delResult.wasDeleted {
+			r = append(r, results.NewDeleteSteamUserShortcutSkipped(config.GameName, steamUserId,
+				"no matching shortcut was found"))
+			continue
 		}
 
-		if len(delResult.NotDeleted) > 0 {
-			result.IdsToNotDeletedGames[steamUserId] =  delResult.NotDeleted
+		tileDetails := grid.ImageDetails{
+			DataVerifier:       config.Info.DataLocations,
+			OwnerUserId:        steamUserId,
+			GameExecutablePath: config.LauncherExePath,
+			GameName:           config.GameName,
 		}
+
+		err = removeShortcutTile(tileDetails)
+		if err != nil {
+			r = append(r, results.NewDeleteSteamUserShortcutSuccessWarning(config.GameName,
+				steamUserId, "failed to delete game tile - " + err.Error()))
+			continue
+		}
+
+		r = append(r, results.NewDeleteSteamUserShortcutSuccess(config.GameName, steamUserId, ""))
 	}
 
-	return result
+	return r
 }
 
-func deleteShortcuts(config DeleteShortcutConfig, shortcutsFilePath string) (DeletedShortcutResult, error) {
+// TODO: This whole operation is IO bound - not good.
+//  This needs to be refactored to provide the data set,
+//  and then return the modified data set, leaving the
+//  IO work to the most minimal amount possible.
+func deleteShortcut(config DeleteShortcutConfig, shortcutsFilePath string) (deleteShortcutResult, error) {
 	f, err := os.OpenFile(shortcutsFilePath, os.O_RDWR, defaultShortcutsFileMode)
 	if err != nil {
-		return DeletedShortcutResult{}, err
+		return deleteShortcutResult{}, err
 	}
 	defer f.Close()
 
 	scs, err := shortcuts.ReadVdfV1(f)
 	if err != nil {
-		return DeletedShortcutResult{}, err
+		return deleteShortcutResult{}, err
 	}
 
 	_, err = f.Seek(0, 0)
 	if err != nil {
-		return DeletedShortcutResult{}, err
+		return deleteShortcutResult{}, err
 	}
 
-	var deleted []string
+	result := deleteShortcutResult{}
 
-	notDeleted := make([]string, len(config.GameNames))
-
-	copy(notDeleted, config.GameNames)
-
-	for shortcutIndex, s := range scs {
-		for delIndex := range notDeleted {
-			if notDeleted[delIndex] == s.AppName {
-				scs = append(scs[:shortcutIndex], scs[shortcutIndex+1:]...)
-
-				deleted = append(deleted, notDeleted[delIndex])
-
-				notDeleted = append(notDeleted[:delIndex], notDeleted[delIndex+1:]...)
-
-				break
-			}
+	for shortcutIndex := range scs {
+		if scs[shortcutIndex].AppName == config.GameName {
+			// TODO: There might be multiple entries, so loop over all shortcuts.
+			scs = append(scs[:shortcutIndex], scs[shortcutIndex+1:]...)
+			result.wasDeleted = true
 		}
 	}
 
 	err = f.Truncate(0)
 	if err != nil {
-		return DeletedShortcutResult{}, err
+		return deleteShortcutResult{}, err
 	}
 
 	err = shortcuts.WriteVdfV1(scs, f)
 	if err != nil {
-		return DeletedShortcutResult{}, err
+		return deleteShortcutResult{}, err
 	}
 
-	return DeletedShortcutResult{
-		Deleted:    deleted,
-		NotDeleted: notDeleted,
-	}, nil
+	return result, nil
+}
+
+func removeShortcutTile(tileDetails grid.ImageDetails) error {
+	removeConfig := grid.RemoveConfig{
+		TargetDetails: tileDetails,
+	}
+
+	err := grid.RemoveImage(removeConfig)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
