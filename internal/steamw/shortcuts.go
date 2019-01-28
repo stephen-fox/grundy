@@ -1,6 +1,7 @@
 package steamw
 
 import (
+	"bytes"
 	"os"
 	"path"
 	"strings"
@@ -17,15 +18,23 @@ const (
 
 type NewShortcutConfig struct {
 	Name          string
-	LaunchOptions string
+	LaunchOptions []string
 	ExePath       string
 	IconPath      string
 	TilePath      string
 	Tags          []string
 	Info          DataInfo
 	Warnings      []string
+	startDir      string
 }
 
+func (o *NewShortcutConfig) clean() {
+	o.ExePath = doubleQuoteIfNeeded(o.ExePath)
+	o.IconPath = doubleQuoteIfNeeded(o.IconPath)
+	o.startDir = doubleQuoteIfNeeded(path.Dir(o.ExePath))
+}
+
+// TODO: Clean?
 type DeleteShortcutConfig struct {
 	SkipTileDelete  bool
 	LauncherExePath string
@@ -38,6 +47,8 @@ type deleteShortcutResult struct {
 }
 
 func CreateOrUpdateShortcut(config NewShortcutConfig) []results.Result {
+	config.clean()
+
 	var r []results.Result
 
 	for steamUserId := range config.Info.IdsToDirPaths {
@@ -76,12 +87,10 @@ func CreateOrUpdateShortcut(config NewShortcutConfig) []results.Result {
 }
 
 func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) (shortcuts.UpdateResult, error) {
-	startDir := path.Dir(config.ExePath)
-
 	onMatch := func(name string, matched *shortcuts.Shortcut) {
-		matched.StartDir = startDir
+		matched.StartDir = config.startDir
 		matched.ExePath = config.ExePath
-		matched.LaunchOptions = config.LaunchOptions
+		matched.LaunchOptions = launchOptionsSliceToString(config.LaunchOptions)
 		matched.IconPath = config.IconPath
 		matched.Tags = config.Tags
 	}
@@ -90,9 +99,9 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 		return shortcuts.Shortcut{
 			AppName:       config.Name,
 			ExePath:       config.ExePath,
-			StartDir:      startDir,
+			StartDir:      config.startDir,
 			IconPath:      config.IconPath,
-			LaunchOptions: config.LaunchOptions,
+			LaunchOptions: launchOptionsSliceToString(config.LaunchOptions),
 			Tags:          config.Tags,
 		}, false
 	}
@@ -243,4 +252,31 @@ func removeShortcutTile(tileDetails grid.ImageDetails) error {
 	}
 
 	return nil
+}
+
+func launchOptionsSliceToString(options []string) string {
+	buffer := bytes.NewBuffer(nil)
+
+	for i := range options {
+		buffer.WriteString(options[i])
+		buffer.WriteString(" ")
+	}
+
+	return buffer.String()
+}
+
+func doubleQuoteIfNeeded(s string) string {
+	if strings.Contains(s, " ") {
+		doubleQuote := "\""
+
+		if !strings.HasPrefix(s, doubleQuote) {
+			s = doubleQuote + s
+		}
+
+		if !strings.HasSuffix(s, doubleQuote) {
+			s = s + doubleQuote
+		}
+	}
+
+	return s
 }

@@ -81,7 +81,7 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 		} else {
 			exeFilePath, exeExists := game.ExeFullPath(launcher)
 			if !exeExists {
-				err = errors.New("the executable does not exist - '" + exeFilePath + "'")
+				err = errors.New("the game's executable does not exist at '" + exeFilePath + "'")
 			}
 		}
 		if err != nil {
@@ -119,7 +119,7 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 
 		config := steamw.NewShortcutConfig{
 			Name:          game.Name(),
-			LaunchOptions: createSteamLaunchOptions(game, launcher),
+			LaunchOptions: createLauncherArgs(game, launcher),
 			ExePath:       launcher.ExePath(),
 			IconPath:      icon.FilePath(),
 			TilePath:      tile.FilePath(),
@@ -134,7 +134,8 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 	return r
 }
 
-func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Launcher) string {
+// TODO: Refactor this.
+func createLauncherArgs(game settings.GameSettings, launcher settings.Launcher) []string {
 	var options []string
 
 	if game.ShouldOverrideLauncherArgs() {
@@ -151,9 +152,9 @@ func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Laun
 
 	exePath, _ := game.ExeFullPath(launcher)
 
-	options = append(options, exePath)
+	options = append(options, "\"" + exePath + "\"")
 
-	return strings.Join(options, " ")
+	return options
 }
 
 func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) []results.Result {

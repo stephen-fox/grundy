@@ -396,7 +396,7 @@ func (o *defaultGameSettings) Name() string {
 }
 
 func (o *defaultGameSettings) SetExeSubPath(p string) {
-	o.config.AddOrUpdateKeyValue(none, gameExeSubPath, appendDoubleQuotesIfNeeded(p))
+	o.config.AddOrUpdateKeyValue(none, gameExeSubPath, p)
 }
 
 func (o *defaultGameSettings) ExeFullPath(launcher Launcher) (string, bool) {
@@ -421,7 +421,7 @@ func (o *defaultGameSettings) ExeFullPath(launcher Launcher) (string, bool) {
 		return exeFullPath, false
 	}
 
-	return appendDoubleQuotesIfNeeded(exeFullPath), true
+	return exeFullPath, true
 }
 
 func (o *defaultGameSettings) defaultExeFullPath(launcher Launcher) (string, bool) {
@@ -816,20 +816,4 @@ func Create(parentDirPath string, filenameSuffix string, s SaveableSettings) err
 	defer f.Close()
 
 	return nil
-}
-
-func appendDoubleQuotesIfNeeded(s string) string {
-	if strings.Contains(s, " ") {
-		doubleQuote := "\""
-
-		if !strings.HasPrefix(s, doubleQuote) {
-			s = doubleQuote + s
-		}
-
-		if !strings.HasSuffix(s, doubleQuote) {
-			s = s + doubleQuote
-		}
-	}
-
-	return s
 }
