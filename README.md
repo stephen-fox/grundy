@@ -106,7 +106,7 @@ Let's pretend we are using Dolphin to run the collection we added in the
 previous step. Go ahead and add the following to the file:
 ```ini
 [dolphin]
-exe_path           = 'C:\Program Files\Dolphin\Dolphin.exe'
+exe_path           = C:\Program Files\Dolphin\Dolphin.exe
 default_args       = /e
 game_file_suffixes = .gcm
 ```
