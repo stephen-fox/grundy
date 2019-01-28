@@ -2,8 +2,9 @@
 
 ## What is it?
 Grundy crushes your non-Steam games into Steam shortcuts so you do not have to!
-It is a headless service that looks for configured game collections, and adds
-them to Steam based on your configured game launchers.
+It is a headless service that looks for configured game collections. It will
+automatically add your games to Steam based on your configured game launchers.
+Your changes are automatically discovered.
 
 ## Why?
 I created this application so I could easily add my Nintendo Gamecube games
@@ -17,7 +18,8 @@ steps after the installation completes. It will automatically start on system
 startup and login.
 
 ## Adding your games to Steam
-The following steps explain how to add your games to Steam.
+The following steps explain how to add your games to Steam using
+the application.
 
 #### 1. Organize your game collections
 First, you should organize your games into what I call `game collections`.
