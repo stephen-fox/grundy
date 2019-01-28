@@ -51,28 +51,39 @@ You would then copy the Gamecube files into their respective directories. The
 Gamecube files do not need to be named in any particular manner. Just make sure
 they have a file extension (usually `.gcm`).
 
-#### 2. (Optional) Add icons
-If you would like grundy to add an icon for your shortcut, make sure to copy
-your icons into their respective directories. The icons' filenames must end
-with `-icon.png` or `-icon.jpg`. If multiple files exist with that suffix,
-grundy will pick the first one it finds. Make sure your icons conform to
-Steam's icon files requirements.
+#### 2. (Optional) Add icons and grid images
+Steam allows you to set custom images in the following forms:
+- Icons for use the compact "Games Details" view (e.g., 64x64 pixels)
+- Grid images for use with the "Games Grid" view and "Big Picture" mode
 
-For example, if you have icons for Metroid Prime and Pikmin named
+If you would like grundy to add an icon or grid image for your shortcut, make
+sure to copy your images into their respective directories. The image files
+must end with the following suffixes:
+- Icons:
+    - `-icon.png`
+    - `-icon.jpg`
+- Grid images:
+    - `-grid.png`
+    - `-grid.jpg`
+
+If multiple files exist with the above suffixes, grundy will pick the first one
+it finds. Make sure your images conform to Steam's image requirements.
+
+For example, if you have images for Metroid Prime and Pikmin named
 `METROID DUDE.png` and `Pikmin Are Cool.png`, make sure they are renamed to
-`METROID DUDE-icon.png` and `Pikmin Are Cool-icon.png`:
+`METROID DUDE-grid.png` and `Pikmin Are Cool-grid.png`:
 ```
 gamecube-games/
 |
 |---- Metroid Prime/
 |   |
 |   |---- mprime.gcm
-|   |---- METROID DUDE-icon.png
+|   |---- METROID DUDE-grid.png
 |
 |---- Pikmin/
     |
     |---- pikmin.gcm
-    |---- Pikmin Are Cool-icon.png
+    |---- Pikmin Are Cool-grid.png
 ```
 
 #### 3. Find the main settings directory
