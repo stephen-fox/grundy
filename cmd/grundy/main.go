@@ -333,9 +333,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			// If a grid image or icon is deleted, add the path to
 			// the list of updated file paths.
 			updatedFilePaths = append(updatedFilePaths,
-				collectionChange.DeletedFilePathsWithSuffixes(settings.GameIconSuffixes)...)
-			updatedFilePaths = append(updatedFilePaths,
-				collectionChange.DeletedFilePathsWithSuffixes(settings.GameGridImageSuffixes)...)
+				collectionChange.DeletedFilePathsWithSuffixes(settings.GameImageSuffixes)...)
 
 			res := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
 
