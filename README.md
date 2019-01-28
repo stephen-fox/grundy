@@ -150,5 +150,5 @@ Once you have restarted Steam, you will see your new shind shortcuts.
 ## How do I build this?
 Please refer to the [building documentation](docs/building).
 
-## Are there advanced configruation options?
+## Are there advanced configuration options?
 Please refer to the [configuration documentation](docs/configuration).
