@@ -208,7 +208,7 @@ func deleteShortcut(config DeleteShortcutConfig, shortcutsFilePath string) (dele
 	}
 	defer f.Close()
 
-	scs, err := shortcuts.ReadVdfV1(f)
+	currentShortcuts, err := shortcuts.ReadVdfV1(f)
 	if err != nil {
 		return deleteShortcutResult{}, err
 	}
@@ -220,20 +220,25 @@ func deleteShortcut(config DeleteShortcutConfig, shortcutsFilePath string) (dele
 
 	result := deleteShortcutResult{}
 
-	for shortcutIndex := range scs {
-		if scs[shortcutIndex].AppName == config.GameName {
-			// TODO: There might be multiple entries, so loop over all shortcuts.
-			scs = append(scs[:shortcutIndex], scs[shortcutIndex+1:]...)
+	// Based on work by "tomasz":
+	// https://stackoverflow.com/a/20551116
+	i := 0
+	for _, sc := range currentShortcuts {
+		if sc.AppName == config.GameName {
 			result.wasDeleted = true
+			continue
 		}
+		currentShortcuts[i] = sc
+		i++
 	}
+	currentShortcuts = currentShortcuts[:i]
 
 	err = f.Truncate(0)
 	if err != nil {
 		return deleteShortcutResult{}, err
 	}
 
-	err = shortcuts.WriteVdfV1(scs, f)
+	err = shortcuts.WriteVdfV1(currentShortcuts, f)
 	if err != nil {
 		return deleteShortcutResult{}, err
 	}
