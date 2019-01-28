@@ -21,7 +21,7 @@ type NewShortcutConfig struct {
 	LaunchOptions []string
 	ExePath       string
 	IconPath      string
-	TilePath      string
+	GridImagePath string
 	Tags          []string
 	Info          DataInfo
 	Warnings      []string
@@ -36,10 +36,10 @@ func (o *NewShortcutConfig) clean() {
 
 // TODO: Clean?
 type DeleteShortcutConfig struct {
-	SkipTileDelete  bool
-	LauncherExePath string
-	GameName        string
-	Info            DataInfo
+	SkipGridImageDelete bool
+	LauncherExePath     string
+	GameName            string
+	Info                DataInfo
 }
 
 type deleteShortcutResult struct {
@@ -60,7 +60,7 @@ func CreateOrUpdateShortcut(config NewShortcutConfig) []results.Result {
 			continue
 		}
 
-		err = addOrRemoveShortcutTile(config, steamUserId)
+		err = addOrRemoveShortcutGridImage(config, steamUserId)
 		if err != nil {
 			r = append(r, results.NewUpdateSteamUserShortcutFailed(config.Name, steamUserId, err.Error()))
 			continue
@@ -122,21 +122,21 @@ func createOrUpdateShortcut(config NewShortcutConfig, shortcutsFilePath string) 
 	return result, nil
 }
 
-func addOrRemoveShortcutTile(config NewShortcutConfig, steamUserId string) error {
-	tileDetails := grid.ImageDetails{
+func addOrRemoveShortcutGridImage(config NewShortcutConfig, steamUserId string) error {
+	imageDetails := grid.ImageDetails{
 		DataVerifier:       config.Info.DataLocations,
 		OwnerUserId:        steamUserId,
 		GameName:           config.Name,
 		GameExecutablePath: config.ExePath,
 	}
 
-	if len(config.TilePath) == 0 {
+	if len(config.GridImagePath) == 0 {
 		removeConfig := grid.RemoveConfig{
-			TargetDetails: tileDetails,
+			TargetDetails: imageDetails,
 		}
 
-		// TODO: Should this return an error? Perhaps the tile
-		//  never existed in the first place?
+		// TODO: Should this return an error? Perhaps the grid
+		//  image never existed in the first place?
 		err := grid.RemoveImage(removeConfig)
 		if err != nil {
 			return err
@@ -146,8 +146,8 @@ func addOrRemoveShortcutTile(config NewShortcutConfig, steamUserId string) error
 	}
 
 	gridAddConfig := grid.AddConfig{
-		ImageSourcePath:   config.TilePath,
-		ResultDetails:     tileDetails,
+		ImageSourcePath:   config.GridImagePath,
+		ResultDetails:     imageDetails,
 		OverwriteExisting: true,
 	}
 
@@ -177,17 +177,17 @@ func DeleteShortcut(config DeleteShortcutConfig) []results.Result {
 			continue
 		}
 
-		tileDetails := grid.ImageDetails{
+		imageDetails := grid.ImageDetails{
 			DataVerifier:       config.Info.DataLocations,
 			OwnerUserId:        steamUserId,
 			GameExecutablePath: config.LauncherExePath,
 			GameName:           config.GameName,
 		}
 
-		err = removeShortcutTile(tileDetails)
+		err = removeShortcutGridImage(imageDetails)
 		if err != nil {
 			r = append(r, results.NewDeleteSteamUserShortcutSuccessWarning(config.GameName,
-				steamUserId, "failed to delete game tile - " + err.Error()))
+				steamUserId, "failed to delete game grid image - " + err.Error()))
 			continue
 		}
 
@@ -241,9 +241,9 @@ func deleteShortcut(config DeleteShortcutConfig, shortcutsFilePath string) (dele
 	return result, nil
 }
 
-func removeShortcutTile(tileDetails grid.ImageDetails) error {
+func removeShortcutGridImage(imageDetails grid.ImageDetails) error {
 	removeConfig := grid.RemoveConfig{
-		TargetDetails: tileDetails,
+		TargetDetails: imageDetails,
 	}
 
 	err := grid.RemoveImage(removeConfig)

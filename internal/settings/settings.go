@@ -34,16 +34,16 @@ const (
 	gameAdditionalArgs key = "additional_args"
 	gameIconPath       key = "icon"
 	gameCategories     key = "categories"
-	gameTilePath       key = "tile"
+	gameGridImagePath  key = "grid"
 
 	listSeparator  = ","
 	gameIconPrefix = "-icon"
-	gameTilePrefix = "-tile"
+	gameGridPrefix = "-grid"
 )
 
 var (
-	GameIconSuffixes = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
-	GameTileSuffixes = []string{gameTilePrefix + ".png", gameTilePrefix + ".jpg"}
+	GameIconSuffixes      = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
+	GameGridImageSuffixes = []string{gameGridPrefix + ".png", gameGridPrefix + ".jpg"}
 )
 
 type section string
@@ -331,8 +331,8 @@ type GameSettings interface {
 	AdditionalLauncherArgs() string
 	SetIconPath(string)
 	IconPath() DynamicFilePath
-	SetTilePath(string)
-	TilePath() DynamicFilePath
+	SetGridImagePath(string)
+	GridImagePath() DynamicFilePath
 	AddCategory(string)
 	RemoveCategory(string)
 	SetCategories([]string)
@@ -370,11 +370,11 @@ func (o *defaultGameSettings) Example() SaveableSettings {
 	if runtime.GOOS == "windows" {
 		s.SetExeSubPath("example.exe")
 		s.SetIconPath("C:\\path\\to\\game-icon.png")
-		s.SetTilePath("C:\\path\\to\\game-tile.png")
+		s.SetGridImagePath("C:\\path\\to\\game-grid.png")
 	} else {
 		s.SetExeSubPath("example.sh")
 		s.SetIconPath("/path/to/game-icon.png")
-		s.SetTilePath("/path/to/game-tile.png")
+		s.SetGridImagePath("/path/to/game-grid.png")
 	}
 
 	s.SetCategories([]string{"My Cool Category", "Another Cool Category", "some-other category"})
@@ -464,20 +464,20 @@ func (o *defaultGameSettings) AdditionalLauncherArgs() string {
 	return o.config.KeyValue(none, gameAdditionalArgs)
 }
 
-func (o *defaultGameSettings) SetIconPath(iconPath string) {
-	o.config.AddOrUpdateKeyValue(none, gameIconPath, iconPath)
+func (o *defaultGameSettings) SetIconPath(filePath string) {
+	o.config.AddOrUpdateKeyValue(none, gameIconPath, filePath)
 }
 
 func (o *defaultGameSettings) IconPath() DynamicFilePath {
 	return o.manualFilePathOrExisting(gameIconPath, GameIconSuffixes)
 }
 
-func (o *defaultGameSettings) SetTilePath(tilePath string) {
-	o.config.AddOrUpdateKeyValue(none, gameTilePath, tilePath)
+func (o *defaultGameSettings) SetGridImagePath(filePath string) {
+	o.config.AddOrUpdateKeyValue(none, gameGridImagePath, filePath)
 }
 
-func (o *defaultGameSettings) TilePath() DynamicFilePath {
-	return o.manualFilePathOrExisting(gameTilePath, GameTileSuffixes)
+func (o *defaultGameSettings) GridImagePath() DynamicFilePath {
+	return o.manualFilePathOrExisting(gameGridImagePath, GameGridImageSuffixes)
 }
 
 func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) DynamicFilePath {

@@ -101,20 +101,22 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 
 		icon := game.IconPath()
 		if !icon.WasDynamicallySelected() && !icon.FileExists() {
-			r = append(r, results.NewUpdateShortcutFailed(gameDir, "manual icon does not exist at - '" +
+			r = append(r, results.NewUpdateShortcutFailed(gameDir,
+				"manual icon does not exist at - '" +
 				icon.FilePath() + "'"))
 			continue
 		} else if icon.WasDynamicallySelected() && !icon.FileExists() {
 			warnings = append(warnings, "no icon was provided")
 		}
 
-		tile := game.TilePath()
-		if !tile.WasDynamicallySelected() && !tile.FileExists() {
-			r = append(r, results.NewUpdateShortcutFailed(gameDir, "manual tile does not exist at - '" +
-				tile.FilePath() + "'"))
+		gridImage := game.GridImagePath()
+		if !gridImage.WasDynamicallySelected() && !gridImage.FileExists() {
+			r = append(r, results.NewUpdateShortcutFailed(gameDir,
+				"manual grid image does not exist at - '" +
+				gridImage.FilePath() + "'"))
 			continue
-		} else if tile.WasDynamicallySelected() && !tile.FileExists() {
-			warnings = append(warnings, "no tile was provided")
+		} else if gridImage.WasDynamicallySelected() && !gridImage.FileExists() {
+			warnings = append(warnings, "no grid image was provided")
 		}
 
 		config := steamw.NewShortcutConfig{
@@ -122,7 +124,7 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 			LaunchOptions: createLauncherArgs(game, launcher),
 			ExePath:       launcher.ExePath(),
 			IconPath:      icon.FilePath(),
-			TilePath:      tile.FilePath(),
+			GridImagePath: gridImage.FilePath(),
 			Tags:          game.Categories(),
 			Info:          dataInfo,
 			Warnings:      warnings,
@@ -190,10 +192,10 @@ func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInf
 		gameName, ok := o.config.KnownGames.Disown(p)
 		if ok {
 			config := steamw.DeleteShortcutConfig{
-				GameName:        gameName,
-				Info:            dataInfo,
-				SkipTileDelete:  len(launcherExePath) == 0,
-				LauncherExePath: launcherExePath,
+				GameName:            gameName,
+				Info:                dataInfo,
+				SkipGridImageDelete: len(launcherExePath) == 0,
+				LauncherExePath:     launcherExePath,
 			}
 
 			r = append(r, steamw.DeleteShortcut(config)...)

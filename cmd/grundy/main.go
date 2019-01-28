@@ -249,9 +249,9 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 
 	for _, gameName := range gameDirPathsToGameNames {
 		config := steamw.DeleteShortcutConfig{
-			GameName:       gameName,
-			Info:           info,
-			SkipTileDelete: true,
+			GameName:            gameName,
+			Info:                info,
+			SkipGridImageDelete: true,
 		}
 
 		deleteResults := steamw.DeleteShortcut(config)
@@ -330,12 +330,12 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			//  logic changes.
 
 			updatedFilePaths := collectionChange.UpdatedFilePaths()
-			// If a tile or icon is deleted, add the path to the list
-			// of updated file paths.
+			// If a grid image or icon is deleted, add the path to
+			// the list of updated file paths.
 			updatedFilePaths = append(updatedFilePaths,
 				collectionChange.DeletedFilePathsWithSuffixes(settings.GameIconSuffixes)...)
 			updatedFilePaths = append(updatedFilePaths,
-				collectionChange.DeletedFilePathsWithSuffixes(settings.GameTileSuffixes)...)
+				collectionChange.DeletedFilePathsWithSuffixes(settings.GameGridImageSuffixes)...)
 
 			res := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
 
