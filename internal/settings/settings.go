@@ -39,11 +39,15 @@ const (
 	listSeparator  = ","
 	gameIconPrefix = "-icon"
 	gameGridPrefix = "-grid"
+
+	pngSuffix = ".png"
+	jpgSuffix = ".jpg"
 )
 
 var (
-	GameIconSuffixes      = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
-	GameGridImageSuffixes = []string{gameGridPrefix + ".png", gameGridPrefix + ".jpg"}
+	gameIconSuffixes      = []string{gameIconPrefix + pngSuffix, gameIconPrefix + jpgSuffix}
+	gameGridImageSuffixes = []string{gameGridPrefix + pngSuffix, gameGridPrefix + jpgSuffix}
+	GameImageSuffixes     = append(gameIconSuffixes, gameGridImageSuffixes...)
 )
 
 type section string
@@ -469,7 +473,7 @@ func (o *defaultGameSettings) SetIconPath(filePath string) {
 }
 
 func (o *defaultGameSettings) IconPath() DynamicFilePath {
-	return o.manualFilePathOrExisting(gameIconPath, GameIconSuffixes)
+	return o.manualFilePathOrExisting(gameIconPath, gameIconSuffixes)
 }
 
 func (o *defaultGameSettings) SetGridImagePath(filePath string) {
@@ -477,7 +481,7 @@ func (o *defaultGameSettings) SetGridImagePath(filePath string) {
 }
 
 func (o *defaultGameSettings) GridImagePath() DynamicFilePath {
-	return o.manualFilePathOrExisting(gameGridImagePath, GameGridImageSuffixes)
+	return o.manualFilePathOrExisting(gameGridImagePath, gameGridImageSuffixes)
 }
 
 func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) DynamicFilePath {

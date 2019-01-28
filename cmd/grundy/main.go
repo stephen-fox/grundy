@@ -339,8 +339,9 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 
 			res := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
 
-			// Do not delete game collections if a game icon is deleted.
-			res = append(res, shortcutManager.Delete(collectionChange.DeletedFilePathsWithoutSuffixes(settings.GameIconSuffixes),
+			// Do not delete game collections if a game image is deleted.
+			res = append(res, shortcutManager.Delete(
+				collectionChange.DeletedFilePathsWithoutSuffixes(settings.GameImageSuffixes),
 				false, steamDataInfo)...)
 
 			for _, r := range res {
@@ -448,7 +449,7 @@ OUTER:
 		collectionWatcherConfig := watcher.Config{
 			ScanFunc:     watcher.ScanFilesInSubdirectories,
 			RootDirPath:  collectionDirPath,
-			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameIconSuffixes...),
+			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameImageSuffixes...),
 			Changes:      changes,
 		}
 
