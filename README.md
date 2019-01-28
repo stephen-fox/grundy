@@ -48,16 +48,16 @@ gamecube-games/
 This means you should create a directory named `gamecube-games` (or something
 similar) and then create two directories inside named `Metroid Prime` and
 `Pikmin`. These names will tell grundy how to name the shortcuts. In other
-words, since you named the Metroid Prime game directory `Metroid Prime`, the
-Steam shortcut will also be called `Metroid Prime`.
+words, naming the Metroid Prime game directory as `Metroid Prime` will create
+a Steam shortcut named `Metroid Prime`.
 
 You would then copy the Gamecube files into their respective directories. The
 Gamecube files do not need to be named in any particular manner. Just make sure
-they have a file extension (usually `.gcm`).
+they have a consistent file extension (usually `.gcm`).
 
 #### 2. (Optional) Add icons and grid images
 Steam allows you to set custom images in the following forms:
-- Icons for use the compact "Games Details" view (e.g., 64x64 pixels)
+- Icons for use with the compact "Games Details" view (e.g., 64x64 pixels)
 - Grid images for use with the "Games Grid" view and "Big Picture" mode
 
 If you would like grundy to add an icon or grid image for your shortcut, make
@@ -91,7 +91,7 @@ gamecube-games/
 ```
 
 #### 3. Find the main settings directory
-Now we need to define some settings so grundy will add games collections
+Now we need to define some settings so grundy will add game collections
 to Steam. These settings can be found in the main settings directory.
 
 The main settings directory can be found in the following locations, depending
@@ -101,7 +101,7 @@ on your operating system:
 - Windows: `C:\ProgramData\.grundy` (note the leading period)
 
 #### 4. Tell grundy how your game launchers work
-Once you have located the main settings directory, we will need to edit
+Once you have located the main settings directory, you will need to edit
 `launchers.grundy.ini`. You can open this file in a text editor (such as
 Notepad). Each section in this file will represent a launcher (i.e., a game
 emulator such as Dolphin).
@@ -111,14 +111,14 @@ previous step. Go ahead and add the following to the file:
 ```ini
 [dolphin]
 exe_path           = C:\Program Files\Dolphin\Dolphin.exe
-default_args       = /e
+default_args       = /b /e
 game_file_suffixes = .gcm
 ```
 
 This tells grundy that there is a launcher named `dolphin` that uses the
-executable `C:\Program Files\Dolphin\Dolphin.exe` with the argument `/e`
-to start games. Lastly, it tells grundy that it should look for files ending
-in `.gcm` when searching for games in a game collection that uses the
+executable `C:\Program Files\Dolphin\Dolphin.exe` with the arguments `/b` and
+`/e` to start games. Lastly, it tells grundy that it should look for files
+ending in `.gcm` when searching for games in a game collection that uses the
 `dolphin` launcher. 
 
 #### 5. Tell grundy where your game collections live
