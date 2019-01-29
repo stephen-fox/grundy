@@ -6,21 +6,22 @@ import (
 	"path"
 	"strings"
 
+	"github.com/stephen-fox/grundy/internal/results"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/steamw"
 )
 
 type ShortcutManager interface {
-	RefreshAll(steamDataInfo steamw.DataInfo) (CreatedOrUpdated, Deleted)
-	Update(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) CreatedOrUpdated
-	Delete(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) Deleted
+	RefreshAll(steamDataInfo steamw.DataInfo) []results.Result
+	Update(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) []results.Result
+	Delete(gamePaths []string, isDirs bool, steamDataInfo steamw.DataInfo) []results.Result
 }
 
 type defaultShortcutManager struct {
 	config Config
 }
 
-func (o *defaultShortcutManager) RefreshAll(steamDataInfo steamw.DataInfo) (CreatedOrUpdated, Deleted) {
+func (o *defaultShortcutManager) RefreshAll(steamDataInfo steamw.DataInfo) []results.Result {
 	var deletedDirPaths []string
 	var existingDirPaths []string
 
@@ -35,20 +36,17 @@ func (o *defaultShortcutManager) RefreshAll(steamDataInfo steamw.DataInfo) (Crea
 		}
 	}
 
-	c := o.Update(existingDirPaths, true, steamDataInfo)
+	var r []results.Result
 
-	d := o.Delete(deletedDirPaths, true, steamDataInfo)
+	r = append(r, o.Update(existingDirPaths, true, steamDataInfo)...)
 
-	return c, d
+	r = append(r, o.Delete(deletedDirPaths, true, steamDataInfo)...)
+
+	return r
 }
 
-func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) CreatedOrUpdated {
-	c := CreatedOrUpdated{
-		gameNamesToResults:    make(map[string]steamw.NewShortcutResult),
-		configPathsToLoadErrs: make(map[string]error),
-		notAddedToReasons:     make(map[string]string),
-		missingIcons:          make(map[string]string),
-	}
+func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) []results.Result {
+	var r []results.Result
 
 	for _, gameDir := range gamePaths {
 		if strings.HasPrefix(gameDir, o.config.IgnorePathPrefix) {
@@ -59,16 +57,20 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 			gameDir = path.Dir(gameDir)
 		}
 
-		launcherName, hasGameCollection := o.config.App.HasGameCollection(path.Dir(gameDir))
+		collectionName := path.Dir(gameDir)
+
+		launcherName, hasGameCollection := o.config.App.HasGameCollection(collectionName)
 		if !hasGameCollection {
-			c.notAddedToReasons[gameDir] = "Game collection does not exist"
+			r = append(r, results.NewUpdateShortcutSkipped(gameDir,
+				"game collection '" + collectionName + "' does not exist"))
 			continue
 		}
 
 		launcher, hasLauncher := o.config.Launchers.Has(launcherName)
 		if !hasLauncher {
-			c.notAddedToReasons[gameDir] = "The specified launcher does not " +
-				"exist in the launchers settings - '" + launcherName + "'"
+			r = append(r, results.NewUpdateShortcutSkipped(gameDir,
+				"the specified launcher does not exist in the launchers settings - '" +
+				launcherName + "'"))
 			continue
 		}
 
@@ -79,41 +81,63 @@ func (o *defaultShortcutManager) Update(gamePaths []string, isDirs bool, dataInf
 		} else {
 			exeFilePath, exeExists := game.ExeFullPath(launcher)
 			if !exeExists {
-				err = errors.New("The executable does not exist - '" + exeFilePath + "'")
+				err = errors.New("the game's executable does not exist at '" + exeFilePath + "'")
 			}
 		}
 		if err != nil {
-			c.configPathsToLoadErrs[gameDir] = err
+			r = append(r, results.NewUpdateShortcutFailed(gameDir, err.Error()))
 			continue
 		}
 
+		// TODO: Is this a good idea? Can we be certain that the shortcut
+		//  was not removed by someone/thing else besides us?
 		added := o.config.KnownGames.AddUniqueGameOnly(game, gameDir)
 		if !added {
-			c.notAddedToReasons[gameDir] = "The game '" + game.Name() + "' already exists"
+			r = append(r, results.NewUpdateShortcutSkipped(gameDir, "the game already exists"))
 			continue
 		}
 
-		iconPath, iconExists := game.IconPath()
-		if !iconExists {
-			c.missingIcons[gameDir] = "Icon does not exist at - '" + iconPath + "'"
+		var warnings []string
+
+		icon := game.IconPath()
+		if !icon.WasDynamicallySelected() && !icon.FileExists() {
+			r = append(r, results.NewUpdateShortcutFailed(gameDir,
+				"manual icon does not exist at - '" +
+				icon.FilePath() + "'"))
+			continue
+		} else if icon.WasDynamicallySelected() && !icon.FileExists() {
+			warnings = append(warnings, "no icon was provided")
+		}
+
+		gridImage := game.GridImagePath()
+		if !gridImage.WasDynamicallySelected() && !gridImage.FileExists() {
+			r = append(r, results.NewUpdateShortcutFailed(gameDir,
+				"manual grid image does not exist at - '" +
+				gridImage.FilePath() + "'"))
+			continue
+		} else if gridImage.WasDynamicallySelected() && !gridImage.FileExists() {
+			warnings = append(warnings, "no grid image was provided")
 		}
 
 		config := steamw.NewShortcutConfig{
 			Name:          game.Name(),
-			LaunchOptions: createSteamLaunchOptions(game, launcher),
+			LaunchOptions: createLauncherArgs(game, launcher),
 			ExePath:       launcher.ExePath(),
-			IconPath:      iconPath,
+			IconPath:      icon.FilePath(),
+			GridImagePath: gridImage.FilePath(),
 			Tags:          game.Categories(),
 			Info:          dataInfo,
+			Warnings:      warnings,
 		}
 
-		c.gameNamesToResults[game.Name()] = steamw.CreateOrUpdateShortcutPerId(config)
+		r = append(r, steamw.CreateOrUpdateShortcut(config)...)
 	}
 
-	return c
+	return r
 }
 
-func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Launcher) string {
+// TODO: Refactor this.
+func createLauncherArgs(game settings.GameSettings, launcher settings.Launcher) []string {
 	var options []string
 
 	if game.ShouldOverrideLauncherArgs() {
@@ -130,15 +154,13 @@ func createSteamLaunchOptions(game settings.GameSettings, launcher settings.Laun
 
 	exePath, _ := game.ExeFullPath(launcher)
 
-	options = append(options, exePath)
+	options = append(options, "\"" + exePath + "\"")
 
-	return strings.Join(options, " ")
+	return options
 }
 
-func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) Deleted {
-	d := Deleted{
-		stillHasExecutableToPath: make(map[string]string),
-	}
+func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInfo steamw.DataInfo) []results.Result {
+	var r []results.Result
 
 	for _, p := range gamePaths {
 		if strings.HasPrefix(p, o.config.IgnorePathPrefix) {
@@ -149,15 +171,19 @@ func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInf
 			p = path.Dir(p)
 		}
 
+		var launcherExePath string
+
 		// Do not delete if there is an executable in the directory.
 		launcherName, hasCollection := o.config.App.HasGameCollection(p)
 		if hasCollection {
 			launcher, hasLauncher := o.config.Launchers.Has(launcherName)
 			if hasLauncher {
+				launcherExePath = launcher.ExePath()
 				game := settings.NewGameSettings(p)
 				exePath, exeExists := game.ExeFullPath(launcher)
 				if exeExists {
-					d.stillHasExecutableToPath[p] = exePath
+					r = append(r, results.NewDeleteShortcutSkipped(game.Name(),
+						"a game executable still exists in its directory at '" + exePath + "'"))
 					continue
 				}
 			}
@@ -166,15 +192,17 @@ func (o *defaultShortcutManager) Delete(gamePaths []string, isDirs bool, dataInf
 		gameName, ok := o.config.KnownGames.Disown(p)
 		if ok {
 			config := steamw.DeleteShortcutConfig{
-				GameNames: []string{gameName},
-				Info:      dataInfo,
+				GameName:            gameName,
+				Info:                dataInfo,
+				SkipGridImageDelete: len(launcherExePath) == 0,
+				LauncherExePath:     launcherExePath,
 			}
 
-			d.results = append(d.results, steamw.DeleteShortcutPerId(config))
+			r = append(r, steamw.DeleteShortcut(config)...)
 		}
 	}
 
-	return d
+	return r
 }
 
 type Config struct {

@@ -14,6 +14,7 @@ import (
 	"github.com/stephen-fox/grundy/internal/cyberdaemon"
 	"github.com/stephen-fox/grundy/internal/installer"
 	"github.com/stephen-fox/grundy/internal/lock"
+	"github.com/stephen-fox/grundy/internal/results"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/shortman"
 	"github.com/stephen-fox/grundy/internal/steamw"
@@ -241,34 +242,23 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 		return nil
 	}
 
-	var targets []string
-
-	for _, gameName := range gameDirPathsToGameNames {
-		targets = append(targets, gameName)
-	}
-
 	info, err := steamw.NewSteamDataInfo()
 	if err != nil {
 		return err
 	}
 
-	config := steamw.DeleteShortcutConfig{
-		GameNames: targets,
-		Info:      info,
-	}
+	for _, gameName := range gameDirPathsToGameNames {
+		config := steamw.DeleteShortcutConfig{
+			GameName:            gameName,
+			Info:                info,
+			SkipGridImageDelete: true,
+		}
 
-	result := steamw.DeleteShortcutPerId(config)
+		deleteResults := steamw.DeleteShortcut(config)
 
-	for id, deleted := range result.IdsToDeletedGames {
-		logInfo("Deleted shortcut for", deleted, "for Steam ID", id)
-	}
-
-	for id, notDeleted := range result.IdsToNotDeletedGames {
-		logWarn("Shortcut for", notDeleted, "does not exist for Steam ID", id)
-	}
-
-	for id, err := range result.IdsToFailures {
-		logError("Failed to cleanup shortcut for Steam user ID", id, "-", err.Error())
+		for i := range deleteResults {
+			logResult(deleteResults[i])
+		}
 	}
 
 	return nil
@@ -316,14 +306,9 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 				continue
 			}
 
-			createdUpdated, deleted := shortcutManager.RefreshAll(steamDataInfo)
-			if err != nil {
-				logError("An error occurred when refreshing shortcuts for all games - " + err.Error())
-				continue
+			for _, r := range shortcutManager.RefreshAll(steamDataInfo) {
+				logResult(r)
 			}
-
-			logShortcutManagerCreatedOrUpdated(createdUpdated)
-			logShortcutManagerDeleted(deleted)
 		case collectionChange := <-gameCollectionChanges:
 			if collectionChange.IsErr() {
 				logError("Failed to get changes for game collection - " + collectionChange.ErrDetails())
@@ -339,23 +324,27 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 			}
 
 			// TODO: The following lines determine way too much about game collections'
-			// fates based on game icons. The code should determine game collection
-			// updates and deletions based on game files, rather than icon files.
-			// This code is unintuitive, and might lead to bugs when the business
-			// logic changes.
+			//  fates based on game icons. The code should determine game collection
+			//  updates and deletions based on game files, rather than icon files.
+			//  This code is unintuitive, and might lead to bugs when the business
+			//  logic changes.
 
 			updatedFilePaths := collectionChange.UpdatedFilePaths()
-			// If an icon is deleted, add the path to the list
-			// of updated file paths.
+			// If a grid image or icon is deleted, add the path to
+			// the list of updated file paths.
 			updatedFilePaths = append(updatedFilePaths,
-				collectionChange.DeletedFilePathsWithSuffixes(settings.GameIconSuffixes)...)
-			createdUpdatedShortcuts := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
-			logShortcutManagerCreatedOrUpdated(createdUpdatedShortcuts)
+				collectionChange.DeletedFilePathsWithSuffixes(settings.GameImageSuffixes)...)
 
-			// Do not delete game collections if a game icon is deleted.
-			deletedShortcuts := shortcutManager.Delete(collectionChange.DeletedFilePathsWithoutSuffixes(settings.GameIconSuffixes),
-				false, steamDataInfo)
-			logShortcutManagerDeleted(deletedShortcuts)
+			res := shortcutManager.Update(updatedFilePaths, false, steamDataInfo)
+
+			// Do not delete game collections if a game image is deleted.
+			res = append(res, shortcutManager.Delete(
+				collectionChange.DeletedFilePathsWithoutSuffixes(settings.GameImageSuffixes),
+				false, steamDataInfo)...)
+
+			for _, r := range res {
+				logResult(r)
+			}
 		case c := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
@@ -458,7 +447,7 @@ OUTER:
 		collectionWatcherConfig := watcher.Config{
 			ScanFunc:     watcher.ScanFilesInSubdirectories,
 			RootDirPath:  collectionDirPath,
-			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameIconSuffixes...),
+			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameImageSuffixes...),
 			Changes:      changes,
 		}
 
@@ -495,39 +484,18 @@ func areSlicesEqual(a[]string , b []string) bool {
 	return true
 }
 
-func logShortcutManagerCreatedOrUpdated(result shortman.CreatedOrUpdated) {
-	for _, s := range result.CreatedInfo() {
-		logInfo(s)
-	}
-
-	for _, s := range result.NotAddedInfo() {
-		logWarn(s)
-	}
-
-	for _, s := range result.UpdatedInfo() {
-		logInfo(s)
-	}
-
-	for _, s := range result.FailuresInfo() {
-		logError(s)
-	}
-
-	for _, s := range result.MissingIconsInfo() {
-		logWarn(s)
-	}
-}
-
-func logShortcutManagerDeleted(result shortman.Deleted) {
-	for _, s := range result.DeletedInfo() {
-		logInfo(s)
-	}
-
-	for _, s := range result.NotDeletedInfo() {
-		logWarn(s)
-	}
-
-	for _, s := range result.FailedToDeleteInfo() {
-		logError(s)
+func logResult(result results.Result) {
+	switch result.Outcome() {
+	case results.SucceededWithWarning:
+		logWarn(result.PrintableResult())
+	case results.Failed:
+		logError(result.PrintableResult())
+	case results.Succeeded:
+		fallthrough
+	case results.Skipped:
+		fallthrough
+	default:
+		logInfo(result.PrintableResult())
 	}
 }
 
@@ -547,6 +515,6 @@ func logWarn(v ...interface{}) {
 }
 
 func logFatal(v ...interface{}) {
-	v = append([]interface{}{"[FATAL]"}, v...)
+	v = append([]interface{}{"[FATAL] "}, v...)
 	log.Fatal(v...)
 }

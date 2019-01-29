@@ -34,13 +34,20 @@ const (
 	gameAdditionalArgs key = "additional_args"
 	gameIconPath       key = "icon"
 	gameCategories     key = "categories"
+	gameGridImagePath  key = "grid"
 
 	listSeparator  = ","
 	gameIconPrefix = "-icon"
+	gameGridPrefix = "-grid"
+
+	pngSuffix = ".png"
+	jpgSuffix = ".jpg"
 )
 
 var (
-	GameIconSuffixes = []string{gameIconPrefix + ".png", gameIconPrefix + ".jpg"}
+	gameIconSuffixes      = []string{gameIconPrefix + pngSuffix, gameIconPrefix + jpgSuffix}
+	gameGridImageSuffixes = []string{gameGridPrefix + pngSuffix, gameGridPrefix + jpgSuffix}
+	GameImageSuffixes     = append(gameIconSuffixes, gameGridImageSuffixes...)
 )
 
 type section string
@@ -53,6 +60,30 @@ type key string
 
 func (o key) string() string {
 	return string(o)
+}
+
+type DynamicFilePath interface {
+	FilePath() string
+	WasDynamicallySelected() bool
+	FileExists() bool
+}
+
+type defaultDynamicFilePath struct {
+	filePath   string
+	dynamic    bool
+	fileExists bool
+}
+
+func (o defaultDynamicFilePath) FilePath() string {
+	return o.filePath
+}
+
+func (o defaultDynamicFilePath) WasDynamicallySelected() bool {
+	return o.dynamic
+}
+
+func (o defaultDynamicFilePath) FileExists() bool {
+	return o.fileExists
 }
 
 type SaveableSettings interface {
@@ -303,7 +334,9 @@ type GameSettings interface {
 	SetAdditionalLauncherArgs(string)
 	AdditionalLauncherArgs() string
 	SetIconPath(string)
-	IconPath() (filePath string, exists bool)
+	IconPath() DynamicFilePath
+	SetGridImagePath(string)
+	GridImagePath() DynamicFilePath
 	AddCategory(string)
 	RemoveCategory(string)
 	SetCategories([]string)
@@ -341,9 +374,11 @@ func (o *defaultGameSettings) Example() SaveableSettings {
 	if runtime.GOOS == "windows" {
 		s.SetExeSubPath("example.exe")
 		s.SetIconPath("C:\\path\\to\\game-icon.png")
+		s.SetGridImagePath("C:\\path\\to\\game-grid.png")
 	} else {
 		s.SetExeSubPath("example.sh")
 		s.SetIconPath("/path/to/game-icon.png")
+		s.SetGridImagePath("/path/to/game-grid.png")
 	}
 
 	s.SetCategories([]string{"My Cool Category", "Another Cool Category", "some-other category"})
@@ -365,7 +400,7 @@ func (o *defaultGameSettings) Name() string {
 }
 
 func (o *defaultGameSettings) SetExeSubPath(p string) {
-	o.config.AddOrUpdateKeyValue(none, gameExeSubPath, appendDoubleQuotesIfNeeded(p))
+	o.config.AddOrUpdateKeyValue(none, gameExeSubPath, p)
 }
 
 func (o *defaultGameSettings) ExeFullPath(launcher Launcher) (string, bool) {
@@ -390,7 +425,7 @@ func (o *defaultGameSettings) ExeFullPath(launcher Launcher) (string, bool) {
 		return exeFullPath, false
 	}
 
-	return appendDoubleQuotesIfNeeded(exeFullPath), true
+	return exeFullPath, true
 }
 
 func (o *defaultGameSettings) defaultExeFullPath(launcher Launcher) (string, bool) {
@@ -433,49 +468,46 @@ func (o *defaultGameSettings) AdditionalLauncherArgs() string {
 	return o.config.KeyValue(none, gameAdditionalArgs)
 }
 
-func (o *defaultGameSettings) SetIconPath(iconPath string) {
-	o.config.AddOrUpdateKeyValue(none, gameIconPath, iconPath)
+func (o *defaultGameSettings) SetIconPath(filePath string) {
+	o.config.AddOrUpdateKeyValue(none, gameIconPath, filePath)
 }
 
-func (o *defaultGameSettings) IconPath() (string, bool) {
-	iconPath := o.config.KeyValue(none, gameIconPath)
+func (o *defaultGameSettings) IconPath() DynamicFilePath {
+	return o.manualFilePathOrExisting(gameIconPath, gameIconSuffixes)
+}
 
-	if len(strings.TrimSpace(iconPath)) == 0 {
-		found := false
-		iconPath, found = o.defaultIconPath()
-		if !found {
-			return "", false
+func (o *defaultGameSettings) SetGridImagePath(filePath string) {
+	o.config.AddOrUpdateKeyValue(none, gameGridImagePath, filePath)
+}
+
+func (o *defaultGameSettings) GridImagePath() DynamicFilePath {
+	return o.manualFilePathOrExisting(gameGridImagePath, gameGridImageSuffixes)
+}
+
+func (o *defaultGameSettings) manualFilePathOrExisting(k key, suffixes []string) DynamicFilePath {
+	result := &defaultDynamicFilePath{
+		filePath: o.config.KeyValue(none, k),
+	}
+
+	if len(strings.TrimSpace(result.filePath)) == 0 {
+		result.dynamic = true
+		result.filePath, result.fileExists = existingFilePath(o.dirPath, suffixes)
+		if !result.fileExists {
+			return result
 		}
 	}
 
 	// TODO: Does this handle Windows disk drives properly?
-	iconPath = filepath.Clean(iconPath)
+	result.filePath = filepath.Clean(result.filePath)
 
-	_, statErr := os.Stat(iconPath)
+	_, statErr := os.Stat(result.filePath)
 	if statErr != nil {
-		return iconPath, false
+		return result
 	}
 
-	return appendDoubleQuotesIfNeeded(iconPath), true
-}
+	result.fileExists = true
 
-func (o *defaultGameSettings) defaultIconPath() (string, bool) {
-	iconFunc := func(filename string) bool {
-		for i := range GameIconSuffixes {
-			if strings.HasSuffix(filename, GameIconSuffixes[i]) {
-				return true
-			}
-		}
-
-		return false
-	}
-
-	iconFilePath, found := dirContainsFile(o.dirPath, iconFunc)
-	if found {
-		return iconFilePath, true
-	}
-
-	return "", false
+	return result
 }
 
 func (o *defaultGameSettings) AddCategory(c string) {
@@ -577,6 +609,7 @@ func (o *defaultKnownGamesSettings) AddUniqueGameOnly(game GameSettings, dirPath
 		if gameName == game.Name() {
 			count++
 
+			// TODO: Why did I do this again?
 			if count > 1 {
 				return false
 			}
@@ -729,6 +762,25 @@ func LoadGameSettings(filePath string, launcher Launcher) (GameSettings, error) 
 	return d, nil
 }
 
+func existingFilePath(dirPath string, suffixes []string) (string, bool) {
+	matchFunc := func(filename string) bool {
+		for i := range suffixes {
+			if strings.HasSuffix(filename, suffixes[i]) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	filePath, found := dirContainsFile(dirPath, matchFunc)
+	if found {
+		return filePath, true
+	}
+
+	return "", false
+}
+
 func dirContainsFile(dirPath string, fileNameMatchFunc func(string) bool) (string, bool) {
 	dirInfos, err := ioutil.ReadDir(dirPath)
 	if err != nil {
@@ -768,20 +820,4 @@ func Create(parentDirPath string, filenameSuffix string, s SaveableSettings) err
 	defer f.Close()
 
 	return nil
-}
-
-func appendDoubleQuotesIfNeeded(s string) string {
-	if strings.Contains(s, " ") {
-		doubleQuote := "\""
-
-		if !strings.HasPrefix(s, doubleQuote) {
-			s = doubleQuote + s
-		}
-
-		if !strings.HasSuffix(s, doubleQuote) {
-			s = s + doubleQuote
-		}
-	}
-
-	return s
 }

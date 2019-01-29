@@ -1,9 +1,12 @@
 # grundy
 
+![Shortcuts created by grundy](docs/images/steam-preview.png)
+
 ## What is it?
 Grundy crushes your non-Steam games into Steam shortcuts so you do not have to!
-It is a headless service that looks for configured game collections, and adds
-them to Steam based on your configured game launchers.
+It is a headless service that looks for configured game collections. It will
+automatically add your games to Steam based on your configured game launchers.
+Your changes are automatically discovered.
 
 ## Why?
 I created this application so I could easily add my Nintendo Gamecube games
@@ -17,7 +20,8 @@ steps after the installation completes. It will automatically start on system
 startup and login.
 
 ## Adding your games to Steam
-The following steps explain how to add your games to Steam.
+The following steps explain how to add your games to Steam using
+the application.
 
 #### 1. Organize your game collections
 First, you should organize your games into what I call `game collections`.
@@ -44,39 +48,50 @@ gamecube-games/
 This means you should create a directory named `gamecube-games` (or something
 similar) and then create two directories inside named `Metroid Prime` and
 `Pikmin`. These names will tell grundy how to name the shortcuts. In other
-words, since you named the Metroid Prime game directory `Metroid Prime`, the
-Steam shortcut will also be called `Metroid Prime`.
+words, naming the Metroid Prime game directory as `Metroid Prime` will create
+a Steam shortcut named `Metroid Prime`.
 
 You would then copy the Gamecube files into their respective directories. The
 Gamecube files do not need to be named in any particular manner. Just make sure
-they have a file extension (usually `.gcm`).
+they have a consistent file extension (usually `.gcm`).
 
-#### 2. (Optional) Add icons
-If you would like grundy to add an icon for your shortcut, make sure to copy
-your icons into their respective directories. The icons' filenames must end
-with `-icon.png` or `-icon.jpg`. If multiple files exist with that suffix,
-grundy will pick the first one it finds. Make sure your icons conform to
-Steam's icon files requirements.
+#### 2. (Optional) Add icons and grid images
+Steam allows you to set custom images in the following forms:
+- Icons for use with the compact "Games Details" view (e.g., 64x64 pixels)
+- Grid images for use with the "Games Grid" view and "Big Picture" mode
 
-For example, if you have icons for Metroid Prime and Pikmin named
+If you would like grundy to add an icon or grid image for your shortcut, make
+sure to copy your images into their respective directories. The image files
+must end with the following suffixes:
+- Icons:
+    - `-icon.png`
+    - `-icon.jpg`
+- Grid images:
+    - `-grid.png`
+    - `-grid.jpg`
+
+If multiple files exist with the above suffixes, grundy will pick the first one
+it finds. Make sure your images conform to Steam's image requirements.
+
+For example, if you have images for Metroid Prime and Pikmin named
 `METROID DUDE.png` and `Pikmin Are Cool.png`, make sure they are renamed to
-`METROID DUDE-icon.png` and `Pikmin Are Cool-icon.png`:
+`METROID DUDE-grid.png` and `Pikmin Are Cool-grid.png`:
 ```
 gamecube-games/
 |
 |---- Metroid Prime/
 |   |
 |   |---- mprime.gcm
-|   |---- METROID DUDE-icon.png
+|   |---- METROID DUDE-grid.png
 |
 |---- Pikmin/
     |
     |---- pikmin.gcm
-    |---- Pikmin Are Cool-icon.png
+    |---- Pikmin Are Cool-grid.png
 ```
 
 #### 3. Find the main settings directory
-Now we need to define some settings so grundy will add games collections
+Now we need to define some settings so grundy will add game collections
 to Steam. These settings can be found in the main settings directory.
 
 The main settings directory can be found in the following locations, depending
@@ -86,7 +101,7 @@ on your operating system:
 - Windows: `C:\ProgramData\.grundy` (note the leading period)
 
 #### 4. Tell grundy how your game launchers work
-Once you have located the main settings directory, we will need to edit
+Once you have located the main settings directory, you will need to edit
 `launchers.grundy.ini`. You can open this file in a text editor (such as
 Notepad). Each section in this file will represent a launcher (i.e., a game
 emulator such as Dolphin).
@@ -95,15 +110,15 @@ Let's pretend we are using Dolphin to run the collection we added in the
 previous step. Go ahead and add the following to the file:
 ```ini
 [dolphin]
-exe_path           = 'C:\Program Files\Dolphin\Dolphin.exe'
-default_args       = /e
+exe_path           = C:\Program Files\Dolphin\Dolphin.exe
+default_args       = /b /e
 game_file_suffixes = .gcm
 ```
 
 This tells grundy that there is a launcher named `dolphin` that uses the
-executable `C:\Program Files\Dolphin\Dolphin.exe` with the argument `/e`
-to start games. Lastly, it tells grundy that it should look for files ending
-in `.gcm` when searching for games in a game collection that uses the
+executable `C:\Program Files\Dolphin\Dolphin.exe` with the arguments `/b` and
+`/e` to start games. Lastly, it tells grundy that it should look for files
+ending in `.gcm` when searching for games in a game collection that uses the
 `dolphin` launcher. 
 
 #### 5. Tell grundy where your game collections live
@@ -139,5 +154,5 @@ Once you have restarted Steam, you will see your new shind shortcuts.
 ## How do I build this?
 Please refer to the [building documentation](docs/building).
 
-## Are there advanced configruation options?
+## Are there advanced configuration options?
 Please refer to the [configuration documentation](docs/configuration).

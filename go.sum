@@ -20,6 +20,10 @@ github.com/stephen-fox/launchctlutil v1.1.0 h1:rP4476CDy8CQFntHcfxIqHoYLmfK9OP9w
 github.com/stephen-fox/launchctlutil v1.1.0/go.mod h1:6T2s/vDUsaN+VK51Hyc+4hRC6PMg9U+FxzyhHu3wgXo=
 github.com/stephen-fox/steamutil v1.0.0 h1:mXI+Mytw/49mijvo3fHWt2FBdT3rBgcoC7bJs0oBATY=
 github.com/stephen-fox/steamutil v1.0.0/go.mod h1:xECd6D2tjqLpD28jNEPkxvOIcYNvTyzxs7Fo39pvnJ4=
+github.com/stephen-fox/steamutil v1.2.0 h1:x5xT/heU3wEJ4Vmc+UU3QiSDpbozMaxyUxZPJnmOVpQ=
+github.com/stephen-fox/steamutil v1.2.0/go.mod h1:xECd6D2tjqLpD28jNEPkxvOIcYNvTyzxs7Fo39pvnJ4=
+github.com/stephen-fox/steamutil v1.3.0 h1:6ZVyW23Hrm5Ez5qdKuJ+zspk0TI/vjGwGoKN6Di6M80=
+github.com/stephen-fox/steamutil v1.3.0/go.mod h1:xECd6D2tjqLpD28jNEPkxvOIcYNvTyzxs7Fo39pvnJ4=
 github.com/stephen-fox/watcher v0.0.2 h1:5r60pb9CtE/FK48fPjdZty4OMW+UcEiAEVaR4qFoASY=
 github.com/stephen-fox/watcher v0.0.2/go.mod h1:ZOpJ8ZhcT7mXKRkiB23CRjeBLRc4X5K+ABXgLcP3KdU=
 golang.org/x/sys v0.0.0-20181218192612-074acd46bca6 h1:MXtOG7w2ND9qNCUZSDBGll/SpVIq7ftozR9I8/JGBHY=
