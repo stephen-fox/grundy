@@ -365,6 +365,15 @@ func mainLoop(primary *settingsWrapper, stop chan chan struct{}) {
 	}
 }
 
+func stopTimerSafely(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
+}
+
 func processPrimarySettingsChange(updatedPaths []string, primary *settingsWrapper, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
 	timerDelay := 5 * time.Second
 
@@ -395,15 +404,6 @@ func processPrimarySettingsChange(updatedPaths []string, primary *settingsWrappe
 			refreshShortcuts.Reset(timerDelay)
 		default:
 			continue
-		}
-	}
-}
-
-func stopTimerSafely(t *time.Timer) {
-	if !t.Stop() {
-		select {
-		case <-t.C:
-		default:
 		}
 	}
 }
