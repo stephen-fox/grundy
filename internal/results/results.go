@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	DeleteShortcut Operation = "delete shortcut"
+	DeleteShortcut Operation = "delete_shortcut"
 	UpdateShortcut Operation = "update_shortcut"
 	CreateShortcut Operation = "create_shortcut"
 )
