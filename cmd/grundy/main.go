@@ -235,7 +235,11 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	}, nil
 }
 
-// TODO: Maybe move this into 'shortman'?
+// cleanupKnownGameShortcuts removes any shortcuts for games that we do not
+// know about anymore.
+//
+// This function is not in 'shortman' because it is more efficient to run it
+// early on (before we create a 'ShortcutManager'.
 func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 	gameDirPathsToGameNames := knownGames.DisownNonExistingGames()
 	if len(gameDirPathsToGameNames) == 0 {
