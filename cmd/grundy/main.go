@@ -40,14 +40,14 @@ var (
 )
 
 type application struct {
-	primary *settingsWrapper
-	stop    chan chan struct{}
+	settings *settingsState
+	stop     chan chan struct{}
 }
 
 func (o *application) Start() error {
 	logInfo("Starting...")
 
-	go mainLoop(o.primary, o.stop)
+	go mainLoop(o.settings, o.stop)
 
 	return nil
 }
@@ -64,13 +64,47 @@ func (o *application) Stop() error {
 	return nil
 }
 
-type settingsWrapper struct {
-	dirPath       string
-	watcher       watcher.Watcher
-	configChanges chan watcher.Change
-	app           settings.AppSettings
-	launchers     settings.LaunchersSettings
-	knownGames    settings.KnownGamesSettings
+type settingsState struct {
+	configDirPath    string
+	watcher          watcher.Watcher
+	configDirChanges chan watcher.Change
+	app              settings.AppSettings
+	launchers        settings.LaunchersSettings
+	knownGames       settings.KnownGamesSettings
+}
+
+func (o *settingsState) onConfigDirChange(updatedPaths []string, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
+	timerDelay := 5 * time.Second
+
+	for _, filePath := range updatedPaths {
+		logInfo("Main settings file has been updated:", filePath)
+
+		switch path.Base(filePath) {
+		case o.app.Filename(""):
+			err := o.app.Reload(filePath)
+			if err != nil {
+				logError("Failed to load application settings -", err.Error())
+				continue
+			}
+
+			stopTimerSafely(updateWatchers)
+			updateWatchers.Reset(timerDelay)
+		case o.launchers.Filename(""):
+			err := o.launchers.Reload(filePath)
+			if err != nil {
+				logError("Failed to load launchers settings -", err.Error())
+				continue
+			}
+
+			stopTimerSafely(updateWatchers)
+			updateWatchers.Reset(timerDelay)
+
+			stopTimerSafely(refreshShortcuts)
+			refreshShortcuts.Reset(timerDelay)
+		default:
+			continue
+		}
+	}
 }
 
 func main() {
@@ -155,14 +189,14 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
-	primary, err := setupSettings(*appSettingsDirPath)
+	currentSettings, err := setupSettings(*appSettingsDirPath)
 	if err != nil {
 		logFatal(err.Error())
 	}
 
 	app := &application{
-		primary: primary,
-		stop:    make(chan chan struct{}),
+		settings: currentSettings,
+		stop:     make(chan chan struct{}),
 	}
 
 	err = daemon.BlockAndRun(app)
@@ -171,7 +205,7 @@ func main() {
 	}
 }
 
-func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
+func setupSettings(settingsDirPath string) (*settingsState, error) {
 	launchers := settings.NewLaunchersSettings()
 	launchers.AddOrUpdate(settings.NewLauncher())
 	app := settings.NewAppSettings()
@@ -186,7 +220,7 @@ func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
 		err := settings.Create(settingsDirPath + "/examples", settings.ExampleSuffix, s.Example())
 		if err != nil {
-			return &settingsWrapper{}, errors.New("Failed to create example application settings file - " + err.Error())
+			return nil, errors.New("Failed to create example application settings file - " + err.Error())
 		}
 
 		if createInMainDir {
@@ -194,7 +228,7 @@ func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
 			if statErr != nil {
 				err := settings.Create(settingsDirPath, "", s)
 				if err != nil {
-					return &settingsWrapper{}, err
+					return nil, err
 				}
 			}
 		}
@@ -202,7 +236,7 @@ func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
 
 	internalDirPath, err := settings.CreateInternalFilesDir(settingsDirPath)
 	if err != nil {
-		return &settingsWrapper{}, errors.New("Failed to create internal settings directory path - " + err.Error())
+		return nil, errors.New("Failed to create internal settings directory path - " + err.Error())
 	}
 
 	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings(internalDirPath)
@@ -213,25 +247,25 @@ func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
 		}
 	}
 
-	primarySettingsWatcherConfig := watcher.Config{
+	configDirWatcherConfig := watcher.Config{
 		ScanFunc:     watcher.ScanFilesInDirectory,
 		RootDirPath:  settingsDirPath,
 		FileSuffixes: []string{settings.FileExtension},
 		Changes:      make(chan watcher.Change),
 	}
 
-	primarySettingsWatcher, err := watcher.NewWatcher(primarySettingsWatcherConfig)
+	configDirWatcher, err := watcher.NewWatcher(configDirWatcherConfig)
 	if err != nil {
-		return &settingsWrapper{}, errors.New("Failed to watch application settings directory for changes - " + err.Error())
+		return nil, errors.New("Failed to watch application settings directory for changes - " + err.Error())
 	}
 
-	return &settingsWrapper{
-		dirPath:       settingsDirPath,
-		configChanges: primarySettingsWatcherConfig.Changes,
-		watcher:       primarySettingsWatcher,
-		app:           app,
-		launchers:     launchers,
-		knownGames:    knownGames,
+	return &settingsState{
+		configDirPath:    settingsDirPath,
+		configDirChanges: configDirWatcherConfig.Changes,
+		watcher:          configDirWatcher,
+		app:              app,
+		launchers:        launchers,
+		knownGames:       knownGames,
 	}, nil
 }
 
@@ -268,20 +302,18 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 	return nil
 }
 
-func mainLoop(primary *settingsWrapper, stop chan chan struct{}) {
-	primary.watcher.Start()
+func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
+	currentSettings.watcher.Start()
 
 	gameCollectionChanges := make(chan watcher.Change)
 	dirPathsToWatchers  := make(map[string]watcher.Watcher)
 
-	shortcutManagerConfig := shortman.Config{
-		App:              primary.app,
-		KnownGames:       primary.knownGames,
-		Launchers:        primary.launchers,
-		IgnorePathPrefix: primary.dirPath,
-	}
-
-	shortcutManager := shortman.NewShortcutManager(shortcutManagerConfig)
+	shortcutManager := shortman.NewShortcutManager(shortman.Config{
+		App:              currentSettings.app,
+		KnownGames:       currentSettings.knownGames,
+		Launchers:        currentSettings.launchers,
+		IgnorePathPrefix: currentSettings.configDirPath,
+	})
 
 	updateWatchersTimer := time.NewTimer(1 * time.Second)
 	stopTimerSafely(updateWatchersTimer)
@@ -291,16 +323,16 @@ func mainLoop(primary *settingsWrapper, stop chan chan struct{}) {
 
 	for {
 		select {
-		case configChange := <-primary.configChanges:
-			if configChange.IsErr() {
+		case configDirChange := <-currentSettings.configDirChanges:
+			if configDirChange.IsErr() {
 				continue
 			}
 
-			processPrimarySettingsChange(configChange.UpdatedFilePaths(), primary, refreshShortcutsTimer, updateWatchersTimer)
+			currentSettings.onConfigDirChange(configDirChange.UpdatedFilePaths(), refreshShortcutsTimer, updateWatchersTimer)
 		case <-updateWatchersTimer.C:
 			logInfo("Updating game collection watchers...")
 
-			updateGameCollectionWatchers(primary, dirPathsToWatchers, gameCollectionChanges)
+			updateGameCollectionWatchers(currentSettings, dirPathsToWatchers, gameCollectionChanges)
 		case <-refreshShortcutsTimer.C:
 			logInfo("Refreshing shortcuts for known games...")
 
@@ -356,7 +388,7 @@ func mainLoop(primary *settingsWrapper, stop chan chan struct{}) {
 				delete(dirPathsToWatchers, k)
 			}
 
-			primary.watcher.Destroy()
+			currentSettings.watcher.Destroy()
 
 			c <- struct{}{}
 
@@ -374,42 +406,8 @@ func stopTimerSafely(t *time.Timer) {
 	}
 }
 
-func processPrimarySettingsChange(updatedPaths []string, primary *settingsWrapper, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
-	timerDelay := 5 * time.Second
-
-	for _, filePath := range updatedPaths {
-		logInfo("Main settings file has been updated:", filePath)
-
-		switch path.Base(filePath) {
-		case primary.app.Filename(""):
-			err := primary.app.Reload(filePath)
-			if err != nil {
-				logError("Failed to load application settings -", err.Error())
-				continue
-			}
-
-			stopTimerSafely(updateWatchers)
-			updateWatchers.Reset(timerDelay)
-		case primary.launchers.Filename(""):
-			err := primary.launchers.Reload(filePath)
-			if err != nil {
-				logError("Failed to load launchers settings -", err.Error())
-				continue
-			}
-
-			stopTimerSafely(updateWatchers)
-			updateWatchers.Reset(timerDelay)
-
-			stopTimerSafely(refreshShortcuts)
-			refreshShortcuts.Reset(timerDelay)
-		default:
-			continue
-		}
-	}
-}
-
-func updateGameCollectionWatchers(primary *settingsWrapper, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Change) {
-	gameCollectionsToLauncherNames := primary.app.GameCollectionsPathsToLauncherNames()
+func updateGameCollectionWatchers(currentSettings *settingsState, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Change) {
+	gameCollectionsToLauncherNames := currentSettings.app.GameCollectionsPathsToLauncherNames()
 
 	// Stop watchers for game collection directories we are no longer watching.
 OUTER:
@@ -429,7 +427,7 @@ OUTER:
 
 	// Create and start new game collection watchers.
 	for collectionDirPath, launcherName := range gameCollectionsToLauncherNames {
-		launcher, hasLauncher := primary.launchers.Has(launcherName)
+		launcher, hasLauncher := currentSettings.launchers.Has(launcherName)
 		if !hasLauncher {
 			logError("The collection '" + collectionDirPath + "' will not be added - Launcher '" +
 				launcher.Name() + "' does not exist in the launchers configuration file")
