@@ -13,11 +13,11 @@ import (
 
 	"github.com/stephen-fox/grundy/internal/cyberdaemon"
 	"github.com/stephen-fox/grundy/internal/installer"
-	"github.com/stephen-fox/grundy/internal/lock"
 	"github.com/stephen-fox/grundy/internal/results"
 	"github.com/stephen-fox/grundy/internal/settings"
 	"github.com/stephen-fox/grundy/internal/shortman"
 	"github.com/stephen-fox/grundy/internal/steamw"
+	"github.com/stephen-fox/ipcm"
 	"github.com/stephen-fox/watcher"
 )
 
@@ -134,18 +134,18 @@ func main() {
 		os.Exit(0)
 	}
 
-	instanceLock := lock.NewLock(settings.InternalFilesDir(*appSettingsDirPath))
-	err = instanceLock.Acquire()
+	appMutex, err := ipcm.NewMutex(ipcm.MutexConfig{
+		Resource: settings.InternalFilesDir(*appSettingsDirPath),
+	})
 	if err != nil {
 		logFatal(err.Error())
 	}
-	defer instanceLock.Release()
 
-	go func() {
-		for err := range instanceLock.Errs() {
-			logError("Error maintaining instance lock - " + err.Error())
-		}
-	}()
+	err = appMutex.TimedTryLock(3 * time.Second)
+	if err != nil {
+		logFatal("another instance of the application is running ", err.Error())
+	}
+	defer appMutex.Unlock()
 
 	logFile, err := settings.LogFile(*appSettingsDirPath)
 	if err != nil {
