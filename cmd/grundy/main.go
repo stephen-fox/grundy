@@ -40,7 +40,7 @@ var (
 )
 
 type application struct {
-	primary *primarySettings
+	primary *settingsWrapper
 	stop    chan chan struct{}
 }
 
@@ -64,7 +64,7 @@ func (o *application) Stop() error {
 	return nil
 }
 
-type primarySettings struct {
+type settingsWrapper struct {
 	dirPath       string
 	watcher       watcher.Watcher
 	configChanges chan watcher.Change
@@ -155,7 +155,7 @@ func main() {
 
 	log.SetOutput(io.MultiWriter(logFile, os.Stderr))
 
-	primary, err := setupPrimarySettings(*appSettingsDirPath)
+	primary, err := setupSettings(*appSettingsDirPath)
 	if err != nil {
 		logFatal(err.Error())
 	}
@@ -171,7 +171,7 @@ func main() {
 	}
 }
 
-func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
+func setupSettings(settingsDirPath string) (*settingsWrapper, error) {
 	launchers := settings.NewLaunchersSettings()
 	launchers.AddOrUpdate(settings.NewLauncher())
 	app := settings.NewAppSettings()
@@ -186,7 +186,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 	for s, createInMainDir := range saveableToShouldCreateInSettingsDir {
 		err := settings.Create(settingsDirPath + "/examples", settings.ExampleSuffix, s.Example())
 		if err != nil {
-			return &primarySettings{}, errors.New("Failed to create example application settings file - " + err.Error())
+			return &settingsWrapper{}, errors.New("Failed to create example application settings file - " + err.Error())
 		}
 
 		if createInMainDir {
@@ -194,7 +194,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 			if statErr != nil {
 				err := settings.Create(settingsDirPath, "", s)
 				if err != nil {
-					return &primarySettings{}, err
+					return &settingsWrapper{}, err
 				}
 			}
 		}
@@ -202,7 +202,7 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 
 	internalDirPath, err := settings.CreateInternalFilesDir(settingsDirPath)
 	if err != nil {
-		return &primarySettings{}, errors.New("Failed to create internal settings directory path - " + err.Error())
+		return &settingsWrapper{}, errors.New("Failed to create internal settings directory path - " + err.Error())
 	}
 
 	knownGames, loaded := settings.LoadOrCreateKnownGamesSettings(internalDirPath)
@@ -222,10 +222,10 @@ func setupPrimarySettings(settingsDirPath string) (*primarySettings, error) {
 
 	primarySettingsWatcher, err := watcher.NewWatcher(primarySettingsWatcherConfig)
 	if err != nil {
-		return &primarySettings{}, errors.New("Failed to watch application settings directory for changes - " + err.Error())
+		return &settingsWrapper{}, errors.New("Failed to watch application settings directory for changes - " + err.Error())
 	}
 
-	return &primarySettings{
+	return &settingsWrapper{
 		dirPath:       settingsDirPath,
 		configChanges: primarySettingsWatcherConfig.Changes,
 		watcher:       primarySettingsWatcher,
@@ -268,7 +268,7 @@ func cleanupKnownGameShortcuts(knownGames settings.KnownGamesSettings) error {
 	return nil
 }
 
-func mainLoop(primary *primarySettings, stop chan chan struct{}) {
+func mainLoop(primary *settingsWrapper, stop chan chan struct{}) {
 	primary.watcher.Start()
 
 	gameCollectionChanges := make(chan watcher.Change)
@@ -365,7 +365,7 @@ func mainLoop(primary *primarySettings, stop chan chan struct{}) {
 	}
 }
 
-func processPrimarySettingsChange(updatedPaths []string, primary *primarySettings, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
+func processPrimarySettingsChange(updatedPaths []string, primary *settingsWrapper, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
 	timerDelay := 5 * time.Second
 
 	for _, filePath := range updatedPaths {
@@ -408,7 +408,7 @@ func stopTimerSafely(t *time.Timer) {
 	}
 }
 
-func updateGameCollectionWatchers(primary *primarySettings, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Change) {
+func updateGameCollectionWatchers(primary *settingsWrapper, dirPathsToWatchers map[string]watcher.Watcher, changes chan watcher.Change) {
 	gameCollectionsToLauncherNames := primary.app.GameCollectionsPathsToLauncherNames()
 
 	// Stop watchers for game collection directories we are no longer watching.
