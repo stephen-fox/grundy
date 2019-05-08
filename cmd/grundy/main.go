@@ -21,6 +21,13 @@ import (
 	"github.com/stephen-fox/watcher"
 )
 
+type configReloadAction string
+
+const (
+	refreshKnownGames     configReloadAction = "refresh_known_games"
+	updateGameCollections configReloadAction = "update_game_collections"
+)
+
 const (
 	name        = "grundy"
 	description = "Grundy crushes your games into Steam shortcuts " +
@@ -73,11 +80,11 @@ type settingsState struct {
 	knownGames       settings.KnownGamesSettings
 }
 
-func (o *settingsState) onConfigDirChange(updatedPaths []string, refreshShortcuts *time.Timer, updateWatchers *time.Timer) {
-	timerDelay := 5 * time.Second
+func (o *settingsState) reload(updatedPaths []string) map[configReloadAction]configReloadAction {
+	actions := make(map[configReloadAction]configReloadAction)
 
 	for _, filePath := range updatedPaths {
-		logInfo("Main settings file has been updated:", filePath)
+		logInfo("Settings file has been updated:", filePath)
 
 		switch path.Base(filePath) {
 		case o.app.Filename(""):
@@ -87,8 +94,7 @@ func (o *settingsState) onConfigDirChange(updatedPaths []string, refreshShortcut
 				continue
 			}
 
-			stopTimerSafely(updateWatchers)
-			updateWatchers.Reset(timerDelay)
+			actions[updateGameCollections] = updateGameCollections
 		case o.launchers.Filename(""):
 			err := o.launchers.Reload(filePath)
 			if err != nil {
@@ -96,15 +102,14 @@ func (o *settingsState) onConfigDirChange(updatedPaths []string, refreshShortcut
 				continue
 			}
 
-			stopTimerSafely(updateWatchers)
-			updateWatchers.Reset(timerDelay)
-
-			stopTimerSafely(refreshShortcuts)
-			refreshShortcuts.Reset(timerDelay)
+			actions[updateGameCollections] = updateGameCollections
+			actions[refreshKnownGames] = refreshKnownGames
 		default:
 			continue
 		}
 	}
+
+	return actions
 }
 
 func main() {
@@ -315,11 +320,11 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 		IgnorePathPrefix: currentSettings.configDirPath,
 	})
 
-	updateWatchersTimer := time.NewTimer(1 * time.Second)
-	stopTimerSafely(updateWatchersTimer)
+	updateCollectionsTimer := newStoppedTimer()
 
-	refreshShortcutsTimer := time.NewTimer(1 * time.Second)
-	stopTimerSafely(refreshShortcutsTimer)
+	refreshKnownGamesTimer := newStoppedTimer()
+
+	timerDuration := 5 * time.Second
 
 	for {
 		select {
@@ -328,13 +333,24 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 				continue
 			}
 
-			currentSettings.onConfigDirChange(configDirChange.UpdatedFilePaths(), refreshShortcutsTimer, updateWatchersTimer)
-		case <-updateWatchersTimer.C:
-			logInfo("Updating game collection watchers...")
+			for _, action := range currentSettings.reload(configDirChange.UpdatedFilePaths()) {
+				switch action {
+				case updateGameCollections:
+					stopTimerSafely(updateCollectionsTimer)
+					updateCollectionsTimer.Reset(timerDuration)
+				case refreshKnownGames:
+					stopTimerSafely(refreshKnownGamesTimer)
+					refreshKnownGamesTimer.Reset(timerDuration)
+				default:
+					logError("Unknown action: ", action)
+				}
+			}
+		case <-updateCollectionsTimer.C:
+			logInfo("Updating game collections...")
 
 			updateGameCollectionWatchers(currentSettings, dirPathsToWatchers, gameCollectionChanges)
-		case <-refreshShortcutsTimer.C:
-			logInfo("Refreshing shortcuts for known games...")
+		case <-refreshKnownGamesTimer.C:
+			logInfo("Refreshing known games and their shortcuts...")
 
 			steamDataInfo, err := steamw.NewSteamDataInfo()
 			if err != nil {
@@ -395,6 +411,12 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 			return
 		}
 	}
+}
+
+func newStoppedTimer() *time.Timer {
+	t := time.NewTimer(1*time.Second)
+	stopTimerSafely(t)
+	return t
 }
 
 func stopTimerSafely(t *time.Timer) {
