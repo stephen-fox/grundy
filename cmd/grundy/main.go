@@ -432,12 +432,10 @@ func updateGameCollectionWatchers(currentSettings *settingsState, dirPathsToWatc
 	gameCollectionsToLauncherNames := currentSettings.app.GameCollectionsPathsToLauncherNames()
 
 	// Stop watchers for game collection directories we are no longer watching.
-OUTER:
 	for dirPath, currentWatcher := range dirPathsToWatchers {
-		for newDirPath := range gameCollectionsToLauncherNames {
-			if dirPath == newDirPath {
-				continue OUTER
-			}
+		_, isWatchingDir := gameCollectionsToLauncherNames[dirPath]
+		if isWatchingDir {
+			continue
 		}
 
 		logInfo("No longer watching", dirPath)
