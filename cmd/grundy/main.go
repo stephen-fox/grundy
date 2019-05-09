@@ -397,7 +397,7 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 			for _, r := range res {
 				logResult(r)
 			}
-		case c := <-stop:
+		case rejoin := <-stop:
 			for k, w := range dirPathsToWatchers {
 				w.Destroy()
 
@@ -406,7 +406,7 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 
 			currentSettings.watcher.Destroy()
 
-			c <- struct{}{}
+			rejoin <- struct{}{}
 
 			return
 		}
