@@ -261,7 +261,7 @@ func setupSettings(settingsDirPath string) (*settingsState, error) {
 	configDirWatcherConfig := watcher.Config{
 		ScanFunc:     watcher.ScanFilesInDirectory,
 		RootDirPath:  settingsDirPath,
-		FileSuffixes: []string{settings.FileExtension},
+		ScanCriteria: []string{settings.FileExtension},
 		Changes:      make(chan watcher.Change),
 	}
 
@@ -468,14 +468,14 @@ func updateGameCollectionWatchers(currentSettings *settingsState, dirPathsToWatc
 		}
 
 		w, hasWatcher := dirPathsToWatchers[collectionDirPath]
-		if hasWatcher && areSlicesEqual(w.Config().FileSuffixes, launcher.GameFileSuffixes()) {
+		if hasWatcher && areSlicesEqual(w.Config().ScanCriteria, launcher.GameFileSuffixes()) {
 			continue
 		}
 
 		collectionWatcherConfig := watcher.Config{
 			ScanFunc:     watcher.ScanFilesInSubdirectories,
 			RootDirPath:  collectionDirPath,
-			FileSuffixes: append(launcher.GameFileSuffixes(), settings.GameImageSuffixes...),
+			ScanCriteria: append(launcher.GameFileSuffixes(), settings.GameImageSuffixes...),
 			Changes:      changes,
 		}
 

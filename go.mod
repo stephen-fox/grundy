@@ -11,6 +11,6 @@ require (
 	github.com/stephen-fox/ipcm v0.0.1
 	github.com/stephen-fox/launchctlutil v1.1.0
 	github.com/stephen-fox/steamutil v1.3.0
-	github.com/stephen-fox/watcher v0.0.2
+	github.com/stephen-fox/watcher v0.1.0
 	gopkg.in/ini.v1 v1.39.3 // indirect
 )
