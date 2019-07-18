@@ -130,6 +130,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// TODO: 'daemonId' is not set when run using "go run ...". The
+	//  Windows service library requires that a daemon name be provided.
+	if daemonId == "" {
+		daemonId = name
+	}
+
 	daemonConfig, err := cyberdaemon.GetConfig(daemonId, description)
 	if err != nil {
 		logFatal("Failed to create daemon config - " + err.Error())
