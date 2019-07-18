@@ -2,7 +2,6 @@
 
 ![Shortcuts created by grundy](docs/images/steam-preview.png)
 
-## What is it?
 Grundy crushes your non-Steam games into Steam shortcuts so you do not have to!
 It is a headless service that looks for configured game collections. It will
 automatically add your games to Steam based on your configured game launchers.
