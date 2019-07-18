@@ -174,7 +174,7 @@ func main() {
 	}
 
 	appMutex, err := ipcm.NewMutex(ipcm.MutexConfig{
-		Resource: settings.InternalFilesDir(*appSettingsDirPath),
+		Resource: path.Join(settings.InternalFilesDir(*appSettingsDirPath), "lock"),
 	})
 	if err != nil {
 		logFatal(err.Error())
