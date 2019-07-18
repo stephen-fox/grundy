@@ -182,7 +182,7 @@ func main() {
 
 	err = appMutex.TimedTryLock(3 * time.Second)
 	if err != nil {
-		logFatal("another instance of the application is running ", err.Error())
+		logFatal("another instance of the application is running - ", err.Error())
 	}
 	defer appMutex.Unlock()
 
