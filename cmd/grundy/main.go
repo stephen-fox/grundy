@@ -410,7 +410,7 @@ func mainLoop(currentSettings *settingsState, stop chan chan struct{}) {
 				delete(dirPathsToWatchers, k)
 			}
 
-			currentSettings.watcher.Destroy()
+			currentSettings.watcher.Stop()
 
 			rejoin <- struct{}{}
 
